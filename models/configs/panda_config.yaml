@@ -1,0 +1,16 @@
+robot_name: panda
+base_link: panda_link0
+ee_link: panda_link8
+active_joint_names:
+  - panda_joint1
+  - panda_joint2
+  - panda_joint3
+  - panda_joint4
+  - panda_joint5
+  - panda_joint6
+  - panda_joint7
+description_source: justagist/franka_panda_description
+description_notes: >
+  Minimal arm-only Panda URDF with rigid-body inertial parameters and
+  joint damping/friction values derived from the open-source
+  franka_panda_description package.

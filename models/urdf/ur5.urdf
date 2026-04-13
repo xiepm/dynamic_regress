@@ -1,0 +1,172 @@
+<?xml version="1.0"?>
+<robot name="ur5">
+  <!-- UR5 是工业机械臂的标准模型 -->
+  
+  <!-- Base Link -->
+  <link name="world"/>
+  
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="4.0"/>
+      <inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.089" length="0.127"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="world_to_base" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Joint 1 (Shoulder Pan) -->
+  <link name="shoulder_link">
+    <inertial>
+      <origin xyz="0 0 0.1" rpy="0 0 0"/>
+      <mass value="3.7"/>
+      <inertia ixx="0.010" ixy="0" ixz="0" iyy="0.010" iyz="0" izz="0.005"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.1" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.06" length="0.2"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="joint_1" type="revolute">
+    <parent link="base_link"/>
+    <child link="shoulder_link"/>
+    <origin xyz="0 0 0.089" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14159" upper="3.14159" effort="150" velocity="3.14159"/>
+    <dynamics damping="0.5" friction="0.5"/>
+  </joint>
+
+  <!-- Joint 2 (Shoulder Lift) -->
+  <link name="upper_arm_link">
+    <inertial>
+      <origin xyz="0.2125 0 0" rpy="0 0 0"/>
+      <mass value="8.393"/>
+      <inertia ixx="0.220" ixy="0" ixz="0" iyy="0.220" iyz="0" izz="0.05"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.2125 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.425 0.06 0.06"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="joint_2" type="revolute">
+    <parent link="shoulder_link"/>
+    <child link="upper_arm_link"/>
+    <origin xyz="0 0.135 0" rpy="1.5708 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="150" velocity="3.14159"/>
+    <dynamics damping="0.5" friction="0.5"/>
+  </joint>
+
+  <!-- Joint 3 (Elbow) -->
+  <link name="forearm_link">
+    <inertial>
+      <origin xyz="0.2 0 0" rpy="0 0 0"/>
+      <mass value="2.275"/>
+      <inertia ixx="0.05" ixy="0" ixz="0" iyy="0.05" iyz="0" izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.2 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.4 0.05 0.05"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="joint_3" type="revolute">
+    <parent link="upper_arm_link"/>
+    <child link="forearm_link"/>
+    <origin xyz="0.425 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="100" velocity="3.14159"/>
+    <dynamics damping="0.3" friction="0.3"/>
+  </joint>
+
+  <!-- Joint 4 (Wrist 1) -->
+  <link name="wrist1_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.219"/>
+      <inertia ixx="0.008" ixy="0" ixz="0" iyy="0.008" iyz="0" izz="0.005"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.045" length="0.11"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="joint_4" type="revolute">
+    <parent link="forearm_link"/>
+    <child link="wrist1_link"/>
+    <origin xyz="0.4 0 0" rpy="1.5708 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="60" velocity="3.14159"/>
+    <dynamics damping="0.2" friction="0.2"/>
+  </joint>
+
+  <!-- Joint 5 (Wrist 2) -->
+  <link name="wrist2_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.219"/>
+      <inertia ixx="0.008" ixy="0" ixz="0" iyy="0.008" iyz="0" izz="0.005"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.045" length="0.11"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="joint_5" type="revolute">
+    <parent link="wrist1_link"/>
+    <child link="wrist2_link"/>
+    <origin xyz="0 0.11 0" rpy="-1.5708 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14159" upper="3.14159" effort="60" velocity="3.14159"/>
+    <dynamics damping="0.2" friction="0.2"/>
+  </joint>
+
+  <!-- Joint 6 (Wrist 3) -->
+  <link name="tool_link">
+    <inertial>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.1"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="joint_6" type="revolute">
+    <parent link="wrist2_link"/>
+    <child link="tool_link"/>
+    <origin xyz="0 0 0.11" rpy="1.5708 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="60" velocity="3.14159"/>
+    <dynamics damping="0.1" friction="0.1"/>
+  </joint>
+
+</robot>
