@@ -1,5 +1,5 @@
 """
-Step 1: Load Panda Model & Known Parameters
+Step 1: Load robot model and known parameters from URDF.
 """
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
+import xml.etree.ElementTree as ET
 
 import numpy as np
 import yaml
@@ -82,19 +83,76 @@ class RobotModel:
 
 
 class URDFLoader:
-    """Load the Panda URDF and derive dynamic quantities from it."""
+    """Load a robot URDF and derive dynamic quantities from it."""
 
-    def __init__(self, urdf_path: str, config_path: str):
+    def __init__(self, urdf_path: str, config_path: str | None = None):
         self.urdf_path = Path(urdf_path)
-        self.config_path = Path(config_path)
+        self.config_path = Path(config_path) if config_path else None
         if not self.urdf_path.exists():
             raise FileNotFoundError(f"URDF file not found: {urdf_path}")
-        if not self.config_path.exists():
+        if self.config_path is not None and not self.config_path.exists():
             raise FileNotFoundError(f"Config file not found: {config_path}")
 
+    def _infer_metadata_from_urdf(self) -> Dict:
+        """
+        当外部 yaml 配置不存在时，直接从 URDF 推断最基本的元信息。
+
+        推断规则尽量保持朴素稳定：
+        - robot_name: 取 `<robot name="...">`
+        - active_joint_names: 取所有非 fixed 的 joint，保持 URDF 中出现顺序
+        - base_link: 取“不是任何 joint child”的 link
+        - ee_link:   取“不是任何 joint parent”的 link
+        """
+        root = ET.parse(self.urdf_path).getroot()
+        robot_name = root.attrib.get('name', self.urdf_path.stem)
+
+        all_links = [link.attrib['name'] for link in root.findall('link') if 'name' in link.attrib]
+        movable_joints = []
+        parent_links = set()
+        child_links = set()
+
+        for joint in root.findall('joint'):
+            joint_name = joint.attrib.get('name')
+            joint_type = joint.attrib.get('type', '')
+            parent = joint.find('parent')
+            child = joint.find('child')
+
+            if parent is not None and 'link' in parent.attrib:
+                parent_links.add(parent.attrib['link'])
+            if child is not None and 'link' in child.attrib:
+                child_links.add(child.attrib['link'])
+
+            if joint_type != 'fixed' and joint_name:
+                movable_joints.append(joint_name)
+
+        base_candidates = [name for name in all_links if name not in child_links]
+        ee_candidates = [name for name in all_links if name not in parent_links]
+
+        return {
+            'robot_name': robot_name,
+            'active_joint_names': movable_joints,
+            'base_link': base_candidates[0] if base_candidates else (all_links[0] if all_links else 'base_link'),
+            'ee_link': ee_candidates[-1] if ee_candidates else (all_links[-1] if all_links else 'ee_link'),
+            'description_source': str(self.urdf_path),
+        }
+
     def load_config(self) -> Dict:
+        inferred = self._infer_metadata_from_urdf()
+        if self.config_path is None:
+            return inferred
+
         with open(self.config_path, 'r', encoding='utf-8') as handle:
-            return yaml.safe_load(handle)
+            loaded = yaml.safe_load(handle) or {}
+
+        # 兼容一些“只有 joint 名单”的轻量 yaml。
+        if 'controller_joint_names' in loaded and 'active_joint_names' not in loaded:
+            loaded['active_joint_names'] = [
+                name for name in loaded['controller_joint_names']
+                if isinstance(name, str) and name.strip()
+            ]
+
+        merged = {**inferred, **loaded}
+        return merged
 
     def load_pinocchio_model(self) -> Tuple[object, object]:
         if pin is None:
@@ -150,7 +208,7 @@ class URDFLoader:
 
 
 def print_model_info(model: RobotModel):
-    """Print the key dynamic quantities used for identification."""
+    """Print the key model quantities used by the identification pipeline."""
     print(f"\n{'=' * 70}")
     print(f"Robot Model: {model.name}")
     print(f"Source: {model.description_source}")
@@ -158,6 +216,8 @@ def print_model_info(model: RobotModel):
     print(f"Base Link: {model.base_link}")
     print(f"End Effector: {model.ee_link}")
     print(f"{'=' * 70}")
+    print("The inertial / damping / friction values shown below are the current URDF prior values.")
+    print("For real-robot identification, they should not be interpreted as identified ground truth.")
 
     for index, jp in enumerate(model.joint_params, start=1):
         diag_inertia = np.diag(jp.inertia_matrix)
@@ -169,14 +229,16 @@ def print_model_info(model: RobotModel):
         print(f"  Friction: {jp.friction:.6f}")
 
     print(f"\nFull parameter vector length: {len(model.full_parameter_vector())}")
+    if np.allclose(model.damping, 0.0) and np.allclose(model.friction, 0.0):
+        print("Note: all damping/friction values are currently 0 in the URDF.")
+        print("      This is acceptable for a real robot model before friction-related parameters are identified.")
     print(f"{'=' * 70}\n")
 
 
 if __name__ == "__main__":
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
-    urdf_path = project_root / "models" / "urdf" / "panda_arm_minimal.urdf"
-    config_path = project_root / "models" / "configs" / "panda_config.yaml"
-    loader = URDFLoader(str(urdf_path), str(config_path))
+    urdf_path = project_root / "models" / "05_urdf" / "urdf" / "05_urdf_temp.urdf"
+    loader = URDFLoader(str(urdf_path))
     model = loader.build_robot_model()
     print_model_info(model)

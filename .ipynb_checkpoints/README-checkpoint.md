@@ -8,22 +8,6 @@
 - 用 `pin.computeJointTorqueRegressor(...)` 构造刚体动力学回归矩阵
 - 再额外拼接基础摩擦项：粘性摩擦 `dq` 与库伦摩擦 `sign(dq)`
 
-## 新手建议先看
-
-如果你现在最关心的是：
-
-- 项目 clone 下来以后先执行什么命令
-- conda 环境怎么激活
-- 真实数据应该放到哪里
-- 主程序怎么运行
-- 可视化 notebook 应该怎么刷新最新结果
-
-建议先直接看：
-
-- [QUICKSTART.md](/home/xpm/projects/dynamic7dof/dynamic_regress/QUICKSTART.md)
-
-那份文档已经按“从 clone 到运行，再到可视化”的实际操作顺序整理好了。
-
 项目默认支持两种参数化方式：
 
 - `base`：只求解当前数据下真正可辨识的基参数子空间，推荐日常使用

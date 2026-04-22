@@ -36,15 +36,30 @@ class MeasuredDataProcessor:
         cutoff_hz: float = 15.0,
         sampling_freq: float = 100.0,
     ) -> pd.DataFrame:
+        if len(df) < 5:
+            print("Skipped low-pass filter: not enough samples")
+            return df.copy()
+
         window_length = int(max(7, round(2 * sampling_freq / cutoff_hz)))
+        window_length = min(window_length, len(df) if len(df) % 2 == 1 else len(df) - 1)
         if window_length % 2 == 0:
             window_length += 1
+        if window_length < 5:
+            print("Skipped low-pass filter: effective window too short")
+            return df.copy()
         polyorder = min(3, window_length - 2)
 
         filtered = df.copy()
-        for column in [col for col in df.columns if col.startswith('q_') or col.startswith('tau_')]:
+        filterable_columns = [
+            col for col in df.columns
+            if col.startswith('q_')
+            or col.startswith('dq_')
+            or col.startswith('ddq_')
+            or col.startswith('tau_')
+        ]
+        for column in filterable_columns:
             filtered[column] = savgol_filter(df[column].values, window_length=window_length, polyorder=polyorder)
-        print(f"Applied low-pass filter: cutoff={cutoff_hz}Hz, window={window_length}")
+        print(f"Applied low-pass filter: cutoff={cutoff_hz}Hz, window={window_length}, columns={len(filterable_columns)}")
         return filtered
 
     def differentiate_position(self, df: pd.DataFrame, sampling_freq: float = 100.0) -> pd.DataFrame:
@@ -60,27 +75,37 @@ class MeasuredDataProcessor:
     def detect_invalid_samples(
         self,
         df: pd.DataFrame,
-        velocity_margin: float = 1.15,
-        acceleration_limit: float = 8.0,
+        acceleration_margin: float = 3.0,
+        min_acceleration_limit: float = 5.0,
     ) -> np.ndarray:
+        """
+        检测无效样本。
+
+        当前策略刻意不再做“速度阈值筛除”，原因是之前那套阈值来自当前数据本身的最大速度，
+        逻辑上几乎不会真正筛掉异常点，容易造成“看起来有检查，其实基本没作用”的假象。
+
+        现在只保留加速度筛查，并改成：
+        - 每个关节分别估计自己的加速度统计尺度
+        - 用 `observed_max * acceleration_margin` 形成自适应阈值
+        - 再和 `min_acceleration_limit` 取最大值，避免动作太小时阈值过紧
+        """
         valid_mask = np.ones(len(df), dtype=bool)
-        velocity_cols = [f'dq_{i}' for i in range(1, self.num_joints + 1)]
         acceleration_cols = [f'ddq_{i}' for i in range(1, self.num_joints + 1)]
 
-        observed_velocity = np.max(np.abs(df[velocity_cols].values), axis=0)
-        velocity_threshold = np.maximum(observed_velocity * velocity_margin, 0.5)
+        observed_acceleration = np.max(np.abs(df[acceleration_cols].values), axis=0)
+        acceleration_threshold = np.maximum(observed_acceleration * acceleration_margin, min_acceleration_limit)
 
-        for index, column in enumerate(velocity_cols):
-            valid_mask &= np.abs(df[column].values) <= velocity_threshold[index]
-        for column in acceleration_cols:
-            valid_mask &= np.abs(df[column].values) <= acceleration_limit
+        for index, column in enumerate(acceleration_cols):
+            valid_mask &= np.abs(df[column].values) <= acceleration_threshold[index]
 
         invalid_count = int((~valid_mask).sum())
         print(f"Detected {invalid_count} invalid samples ({100 * invalid_count / len(df):.1f}%)")
+        print(f"Adaptive acceleration thresholds: {np.array2string(acceleration_threshold, precision=3)}")
         return valid_mask
 
     def clean_and_export(self, df: pd.DataFrame, output_path: str, min_trajectory_length: int = 40) -> pd.DataFrame:
-        cleaned = df.copy()
+        # 修复：先重置索引，确保下面基于位置的起止区间与 DataFrame 标签一致。
+        cleaned = df.reset_index(drop=True).copy()
         cleaned['valid_mask'] = self.detect_invalid_samples(cleaned)
         cleaned['trajectory_id'] = -1
 
@@ -101,6 +126,14 @@ class MeasuredDataProcessor:
         cleaned = cleaned[cleaned['trajectory_id'] >= 0].reset_index(drop=True)
         cleaned.to_csv(output_path, index=False)
         print(f"After cleaning: {len(cleaned)} valid samples, {cleaned['trajectory_id'].nunique()} trajectories")
+        if not cleaned.empty:
+            trajectory_lengths = cleaned.groupby('trajectory_id').size().to_numpy()
+            print(
+                "Trajectory lengths: "
+                f"min={trajectory_lengths.min()}, "
+                f"max={trajectory_lengths.max()}, "
+                f"mean={trajectory_lengths.mean():.1f}"
+            )
         print(f"Saved to {output_path}")
         return cleaned
 

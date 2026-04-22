@@ -79,7 +79,13 @@ class ParameterIdentifier:
         rank = int(np.sum(diag > threshold))
         return np.sort(np.array(pivots[:rank], dtype=int)), rank
 
-    def identify_parameters(self, df: pd.DataFrame, method: str = 'ols') -> Dict:
+    def identify_parameters(
+        self,
+        df: pd.DataFrame,
+        method: str = 'ols',
+        reference_parameters: np.ndarray | None = None,
+        ridge_lambda: float = 1e-4,
+    ) -> Dict:
         print("\nParameter Identification")
         print("=" * 70)
         print(f"Robot: {self.robot_model.name}")
@@ -98,7 +104,22 @@ class ParameterIdentifier:
             active_columns = np.arange(Phi.shape[1], dtype=int)
             active_Phi = Phi
 
-        theta_active, residuals, solved_rank, s_active = lstsq(active_Phi, tau_flat)
+        method_lower = method.lower()
+        method_upper = method.upper()
+        if method_lower == 'ols':
+            theta_active, residuals, solved_rank, s_active = lstsq(active_Phi, tau_flat)
+            ridge_lambda_used = 0.0
+        elif method.lower() == 'ridge':
+            # 修复：在病态回归矩阵上加入 L2 正则，避免 OLS 在极端条件数下数值不稳定。
+            normal_matrix = active_Phi.T @ active_Phi + ridge_lambda * np.eye(active_Phi.shape[1], dtype=float)
+            theta_active = np.linalg.solve(normal_matrix, active_Phi.T @ tau_flat)
+            residuals = tau_flat - active_Phi @ theta_active
+            solved_rank = int(np.linalg.matrix_rank(active_Phi))
+            s_active = np.linalg.svd(active_Phi, compute_uv=False)
+            ridge_lambda_used = float(ridge_lambda)
+        else:
+            raise ValueError(f"Unsupported identification method: {method}")
+
         active_condition_number = float(s_active[0] / s_active[-1]) if len(s_active) > 1 and s_active[-1] > 0 else np.inf
         theta_full = np.zeros(Phi.shape[1], dtype=float)
         theta_full[active_columns] = theta_active
@@ -109,7 +130,10 @@ class ParameterIdentifier:
         result = {
             'theta_hat': theta_active,
             'theta_hat_full': theta_full,
-            'theta_true': self.robot_model.full_parameter_vector(),
+            # 注意：对 synthetic 数据，可以把生成数据时使用的参数当作“参考真值”；
+            # 但对 real 数据，URDF 里的惯性/摩擦通常只是先验或初值，不能当作真实答案。
+            # 所以这里统一存成 reference_parameters，由调用方决定是否提供。
+            'reference_parameters': None if reference_parameters is None else np.asarray(reference_parameters, dtype=float),
             'active_parameter_indices': active_columns,
             'parameterization': self.parameterization,
             'rank': int(solved_rank),
@@ -123,7 +147,8 @@ class ParameterIdentifier:
             'num_samples': int(len(df)),
             'num_equations': int(Phi.shape[0]),
             'residual_norm': float(np.linalg.norm(residual_vector)),
-            'method': method.upper(),
+            'method': method_upper,
+            'ridge_lambda': ridge_lambda_used,
         }
 
         print(f"Equations: {result['num_equations']}")
@@ -150,25 +175,37 @@ class ParameterIdentifier:
         error = tau_meas - tau_pred
 
         joint_rmse = np.sqrt(np.mean(error ** 2, axis=0))
-        theta_true = np.array(result['theta_true'], dtype=float)
-        theta_est_full = np.array(result['theta_hat_full'], dtype=float)
-        rigid_count = self.regressor.num_rigid_params
+        joint_mae = np.mean(np.abs(error), axis=0)
 
         evaluation = {
             'global_rmse': float(np.sqrt(np.mean(error ** 2))),
             'global_mae': float(np.mean(np.abs(error))),
             'joint_rmse': {f'joint_{idx + 1}': float(value) for idx, value in enumerate(joint_rmse)},
-            'joint_mae': {
-                f'joint_{idx + 1}': float(np.mean(np.abs(error[:, idx])))
-                for idx in range(self.num_joints)
-            },
-            'theta_error_norm_full': float(np.linalg.norm(theta_est_full - theta_true)),
-            'theta_error_norm_rigid': float(np.linalg.norm(theta_est_full[:rigid_count] - theta_true[:rigid_count])),
-            'theta_error_norm_friction': float(np.linalg.norm(theta_est_full[rigid_count:] - theta_true[rigid_count:])),
+            'joint_mae': {f'joint_{idx + 1}': float(value) for idx, value in enumerate(joint_mae)},
         }
+
+        reference_parameters = result.get('reference_parameters')
+        if reference_parameters is not None:
+            theta_reference = np.array(reference_parameters, dtype=float)
+            theta_est_full = np.array(result['theta_hat_full'], dtype=float)
+            rigid_count = self.regressor.num_rigid_params
+            evaluation.update({
+                'theta_reference_error_norm_full': float(np.linalg.norm(theta_est_full - theta_reference)),
+                'theta_reference_error_norm_rigid': float(np.linalg.norm(theta_est_full[:rigid_count] - theta_reference[:rigid_count])),
+                'theta_reference_error_norm_friction': float(np.linalg.norm(theta_est_full[rigid_count:] - theta_reference[rigid_count:])),
+            })
 
         print("\nIdentification Evaluation:")
         print(f"  Global RMSE: {evaluation['global_rmse']:.6f} N·m")
         print(f"  Global MAE:  {evaluation['global_mae']:.6f} N·m")
-        print(f"  Theta error norm (full): {evaluation['theta_error_norm_full']:.6f}")
+        # 新增：按关节打印 RMSE/MAE，方便直接看出是哪几个关节误差更突出。
+        print("  Per-joint metrics:")
+        for joint_idx in range(self.num_joints):
+            print(
+                f"    Joint {joint_idx + 1}: "
+                f"RMSE={joint_rmse[joint_idx]:.6f} N·m, "
+                f"MAE={joint_mae[joint_idx]:.6f} N·m"
+            )
+        if reference_parameters is not None:
+            print(f"  Theta reference error norm (full): {evaluation['theta_reference_error_norm_full']:.6f}")
         return evaluation
