@@ -1,5 +1,10 @@
 """
-Step 5: Process measured data and generate physically consistent synthetic runs.
+处理真实测量数据，并生成与辨识主链兼容的合成运行数据。
+
+这个模块位于流水线的 Step 5，由 `run_pipeline.py` 在模型加载之后调用。
+它负责把真实或 synthetic 数据整理成统一的 `timestamp / q / dq / ddq / tau`
+表格格式，并完成同步、滤波、求导、样本清洗和激励度诊断，供后续参数辨识与残差补偿
+模块直接消费。
 """
 
 from __future__ import annotations
@@ -15,15 +20,45 @@ from load_model import pin
 
 
 class MeasuredDataProcessor:
-    """Processing utilities for measured or synthetic Panda data."""
+    """
+    处理测量数据的工具类。
+
+    这个类把“同步、滤波、求导、清洗”这些时序预处理步骤集中管理，目的是让上游数据入口
+    和下游辨识器之间通过统一表格接口解耦。类本身几乎不持久化状态，关键状态只有
+    `num_joints`，用于约束列名和循环维度。
+    """
 
     def __init__(self, num_joints: int = 7):
+        """
+        记录关节数量，用于驱动后续列处理逻辑。
+
+        Parameters
+        ----------
+        num_joints : int
+            机器人主动关节数。
+        """
         self.num_joints = num_joints
 
     def synchronize_timestamps(self, df: pd.DataFrame, reference_freq: float = 100.0) -> pd.DataFrame:
+        """
+        把原始时间戳重采样到统一参考频率。
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            含 `timestamp` 列的原始数据表。
+        reference_freq : float
+            目标重采样频率，单位 Hz。
+
+        Returns
+        -------
+        pd.DataFrame
+            在统一时间轴上插值后的数据表。
+        """
         df_local = df.copy()
         df_local['timestamp'] = pd.to_numeric(df_local['timestamp'])
         df_local = df_local.sort_values('timestamp').set_index('timestamp')
+        # 统一时间轴是后续滤波、求导和数据集对齐的前提，否则不同文件间采样间隔不可比较。
         target_times = np.arange(df_local.index[0], df_local.index[-1] + 1e-12, 1.0 / reference_freq)
         synced = df_local.reindex(df_local.index.union(target_times)).interpolate(method='index').reindex(target_times)
         synced = synced.reset_index().rename(columns={'index': 'timestamp'})
@@ -36,10 +71,28 @@ class MeasuredDataProcessor:
         cutoff_hz: float = 15.0,
         sampling_freq: float = 100.0,
     ) -> pd.DataFrame:
+        """
+        对位置、速度、加速度和扭矩列做低通滤波。
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            待滤波数据表。
+        cutoff_hz : float
+            截止频率，单位 Hz。
+        sampling_freq : float
+            采样频率，单位 Hz。
+
+        Returns
+        -------
+        pd.DataFrame
+            滤波后的数据表；如果样本太少，会直接返回原始副本。
+        """
         if len(df) < 5:
             print("Skipped low-pass filter: not enough samples")
             return df.copy()
 
+        # Savitzky-Golay 需要奇数窗口；窗口过短时宁可跳过滤波，也不做失真的局部拟合。
         window_length = int(max(7, round(2 * sampling_freq / cutoff_hz)))
         window_length = min(window_length, len(df) if len(df) % 2 == 1 else len(df) - 1)
         if window_length % 2 == 0:
@@ -63,6 +116,21 @@ class MeasuredDataProcessor:
         return filtered
 
     def differentiate_position(self, df: pd.DataFrame, sampling_freq: float = 100.0) -> pd.DataFrame:
+        """
+        通过数值求导从位置列恢复速度和加速度列。
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            至少含 `q_i` 列的数据表。
+        sampling_freq : float
+            采样频率，单位 Hz。
+
+        Returns
+        -------
+        pd.DataFrame
+            新增 `dq_i` 和 `ddq_i` 列的数据表副本。
+        """
         dt = 1.0 / sampling_freq
         differentiated = df.copy()
         for joint_idx in range(1, self.num_joints + 1):
@@ -104,7 +172,24 @@ class MeasuredDataProcessor:
         return valid_mask
 
     def clean_and_export(self, df: pd.DataFrame, output_path: str, min_trajectory_length: int = 40) -> pd.DataFrame:
-        # 修复：先重置索引，确保下面基于位置的起止区间与 DataFrame 标签一致。
+        """
+        根据有效样本掩码切分轨迹段，并导出清洗结果。
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            待清洗的数据表。
+        output_path : str
+            输出 CSV 路径。
+        min_trajectory_length : int
+            轨迹段最小长度，小于该值的连续有效片段会被丢弃。
+
+        Returns
+        -------
+        pd.DataFrame
+            仅保留有效轨迹段的清洗后数据表。
+        """
+        # 先重置索引，确保下面基于位置的起止区间与 DataFrame 标签一致。
         cleaned = df.reset_index(drop=True).copy()
         cleaned['valid_mask'] = self.detect_invalid_samples(cleaned)
         cleaned['trajectory_id'] = -1
@@ -139,6 +224,7 @@ class MeasuredDataProcessor:
 
 
 def _build_exciting_trajectory(num_samples: int, num_joints: int, dt: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """构造一段多频正弦激励轨迹，用于 synthetic 数据生成。"""
     time = np.arange(num_samples) * dt
     q = np.zeros((num_samples, num_joints))
     dq = np.zeros((num_samples, num_joints))
@@ -175,7 +261,29 @@ def create_synthetic_measured_data(
     timestamp_jitter_std: float = 1e-4,
     seed: int = 2026,
 ) -> pd.DataFrame:
-    """Create a synthetic run using the same Panda dynamics used for identification."""
+    """
+    生成一段与辨识主链一致口径的 synthetic 测量数据。
+
+    Parameters
+    ----------
+    robot_model : RobotModel
+        已加载好的机器人模型。
+    num_samples : int
+        样本数。
+    sampling_freq : float
+        采样频率，单位 Hz。
+    torque_noise_std : float
+        扭矩高斯噪声标准差，单位 N·m。
+    timestamp_jitter_std : float
+        时间戳抖动标准差，单位 s。
+    seed : int
+        随机种子。
+
+    Returns
+    -------
+    pd.DataFrame
+        含时间戳、位置、真实速度/加速度和扭矩的 synthetic 数据表。
+    """
     rng = np.random.default_rng(seed)
     dt = 1.0 / sampling_freq
     q, dq, ddq = _build_exciting_trajectory(num_samples, robot_model.num_joints, dt)
@@ -187,6 +295,7 @@ def create_synthetic_measured_data(
         tau_friction = robot_model.damping * dq[sample_idx] + robot_model.friction * coulomb_sign(dq[sample_idx])
         tau[sample_idx] = tau_rigid + tau_friction
 
+    # 给 synthetic 数据加一点噪声和时间抖动，是为了让它更接近真实采样而不是“完美仿真值”。
     tau += rng.normal(0.0, torque_noise_std, size=tau.shape)
     timestamps = np.arange(num_samples) * dt + rng.normal(0.0, timestamp_jitter_std, size=num_samples)
     timestamps[0] = 0.0
@@ -202,6 +311,21 @@ def create_synthetic_measured_data(
 
 
 def compute_excitation_diagnostics(df: pd.DataFrame, num_joints: int) -> Dict[str, float]:
+    """
+    计算一组简单的激励度诊断指标。
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        处理后的数据集。
+    num_joints : int
+        主动关节数。
+
+    Returns
+    -------
+    Dict[str, float]
+        平均关节跨度、速度/加速度 RMS、零速度占比等诊断量。
+    """
     q_cols = [f'q_{i}' for i in range(1, num_joints + 1)]
     dq_cols = [f'dq_{i}' for i in range(1, num_joints + 1)]
     ddq_cols = [f'ddq_{i}' for i in range(1, num_joints + 1)]

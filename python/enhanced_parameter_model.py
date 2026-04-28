@@ -44,7 +44,12 @@ import pandas as pd
 
 @dataclass
 class RigidBodyParams:
-    """单个连杆的 10 个理论惯性参数。"""
+    """
+    单个连杆的 10 个理论惯性参数容器。
+
+    这里把质量、质量矩和惯性张量拆成显式字段，是为了让参数结构和后续回归矩阵列布局
+    一一对应，避免用匿名数组传来传去时丢失物理含义。
+    """
 
     mass: float
     hx: float
@@ -58,6 +63,14 @@ class RigidBodyParams:
     izz: float
 
     def to_array(self) -> np.ndarray:
+        """
+        按统一列顺序把参数打平成数组。
+
+        Returns
+        -------
+        np.ndarray
+            长度为 10 的参数向量。
+        """
         return np.array(
             [
                 self.mass,
@@ -75,6 +88,14 @@ class RigidBodyParams:
         )
 
     def to_dict(self) -> Dict:
+        """
+        把参数转换成更适合日志或 JSON 展示的字典结构。
+
+        Returns
+        -------
+        Dict
+            包含质量、质量矩和惯性张量字段的字典。
+        """
         return {
             'mass': self.mass,
             'first_moments': [self.hx, self.hy, self.hz],
@@ -84,7 +105,12 @@ class RigidBodyParams:
 
 @dataclass
 class JointFrictionParams:
-    """关节摩擦参数。"""
+    """
+    关节摩擦参数容器。
+
+    这里显式支持“对称库仑摩擦”和“不对称库仑摩擦”两种口径，目的是让同一套参数模型
+    能覆盖工程里常见的摩擦建模变体，而不需要维护多份互不兼容的数据结构。
+    """
 
     viscous: float
     coulomb_positive: float
@@ -92,14 +118,31 @@ class JointFrictionParams:
 
     @property
     def asymmetric(self) -> bool:
+        """判断当前摩擦模型是否区分正反向库仑摩擦。"""
         return self.coulomb_negative is not None
 
     def to_array(self) -> np.ndarray:
+        """
+        按当前摩擦模型配置导出参数数组。
+
+        Returns
+        -------
+        np.ndarray
+            对称模型返回 2 维，不对称模型返回 3 维。
+        """
         if self.asymmetric:
             return np.array([self.viscous, self.coulomb_positive, self.coulomb_negative], dtype=float)
         return np.array([self.viscous, self.coulomb_positive], dtype=float)
 
     def to_dict(self) -> Dict:
+        """
+        转换成适合打印或序列化的字典格式。
+
+        Returns
+        -------
+        Dict
+            摩擦参数字典。
+        """
         data = {
             'viscous': self.viscous,
             'coulomb_positive': self.coulomb_positive,
@@ -111,14 +154,16 @@ class JointFrictionParams:
 
 @dataclass
 class MotorParams:
-    """可选电机参数。"""
+    """可选电机参数，目前仅包含转子惯量。"""
 
     rotor_inertia: float
 
     def to_array(self) -> np.ndarray:
+        """把电机参数导出为数组。"""
         return np.array([self.rotor_inertia], dtype=float)
 
     def to_dict(self) -> Dict:
+        """把电机参数导出为字典。"""
         return {'rotor_inertia': self.rotor_inertia}
 
 
@@ -132,6 +177,16 @@ class ParameterModel:
     """
 
     def __init__(self, asymmetric_coulomb: bool = False, include_rotor_inertia: bool = False):
+        """
+        根据两个开关组合出统一参数模型。
+
+        Parameters
+        ----------
+        asymmetric_coulomb : bool
+            是否启用正反向分离的库仑摩擦参数。
+        include_rotor_inertia : bool
+            是否把电机转子惯量纳入每关节参数。
+        """
         self.asymmetric_coulomb = asymmetric_coulomb
         self.include_rotor_inertia = include_rotor_inertia
 
@@ -149,6 +204,7 @@ class ParameterModel:
 
     @property
     def model_name(self) -> str:
+        """返回当前参数模型的简短名称。"""
         parts = ['rigid10', 'viscous1']
         parts.append('coulomb2' if self.asymmetric_coulomb else 'coulomb1')
         if self.include_rotor_inertia:
@@ -156,6 +212,14 @@ class ParameterModel:
         return '+'.join(parts)
 
     def summary(self) -> Dict:
+        """
+        汇总当前参数模型的配置。
+
+        Returns
+        -------
+        Dict
+            各类参数数量与总参数数目摘要。
+        """
         return {
             'model_name': self.model_name,
             'rigid_body_params_per_link': self.rigid_body_params,
@@ -166,6 +230,14 @@ class ParameterModel:
         }
 
     def parameter_names_per_joint(self) -> List[str]:
+        """
+        给出每个关节参数的列名顺序。
+
+        Returns
+        -------
+        List[str]
+            当前配置下单关节参数名称列表。
+        """
         names = [
             'm',
             'hx',
@@ -189,6 +261,14 @@ class ParameterModel:
 
     @classmethod
     def print_supported_variants(cls):
+        """
+        打印当前统一参数模型支持的几个常见变体。
+
+        Returns
+        -------
+        None
+            结果直接输出到终端。
+        """
         print("\n" + "=" * 80)
         print("统一参数模型的支持变体")
         print("=" * 80)
@@ -221,6 +301,18 @@ class EnhancedRegressorBuilder:
         asymmetric_coulomb: bool = False,
         include_rotor_inertia: bool = False,
     ):
+        """
+        初始化增强回归矩阵构建器。
+
+        Parameters
+        ----------
+        num_joints : int
+            主动关节数。
+        asymmetric_coulomb : bool
+            是否使用不对称库仑摩擦。
+        include_rotor_inertia : bool
+            是否纳入转子惯量项。
+        """
         self.num_joints = num_joints
         self.model = ParameterModel(
             asymmetric_coulomb=asymmetric_coulomb,
@@ -240,6 +332,20 @@ class EnhancedRegressorBuilder:
 
         列布局固定为：
         [10个刚体参数 | 1个粘性摩擦 | 1或2个库仑摩擦 | 可选1个转子惯量]
+
+        Parameters
+        ----------
+        q : np.ndarray
+            单个样本的关节位置。
+        dq : np.ndarray
+            单个样本的关节速度。
+        ddq : np.ndarray
+            单个样本的关节加速度。
+
+        Returns
+        -------
+        np.ndarray
+            单个样本对应的一行增强回归向量。
         """
         phi_row = np.zeros(self.total_params, dtype=float)
 
@@ -282,6 +388,19 @@ class EnhancedRegressorBuilder:
         return phi_row
 
     def build_regressor_matrix(self, df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        逐样本构造整张增强回归矩阵。
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            含 `q_i / dq_i / ddq_i / tau_i` 列的数据表。
+
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            回归矩阵 `Phi` 与对应的力矩矩阵 `tau_data`。
+        """
         q_data = np.array([df[f'q_{i}'].values for i in range(1, self.num_joints + 1)]).T
         dq_data = np.array([df[f'dq_{i}'].values for i in range(1, self.num_joints + 1)]).T
         ddq_data = np.array([df[f'ddq_{i}'].values for i in range(1, self.num_joints + 1)]).T

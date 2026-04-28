@@ -215,6 +215,166 @@ python run_pipeline.py --data-source real --urdf-path models/05_urdf/urdf/05_urd
 python run_pipeline.py --urdf-path models/05_urdf/urdf/05_urdf_temp.urdf --config-path your_config.yaml
 ```
 
+## `run_pipeline.py` 命令行选项
+
+当前主入口仍然是：
+
+```bash
+python run_pipeline.py [options]
+```
+
+内部流程现在已经拆分为：
+
+- [python/pipeline_identification.py](/home/xpm/projects/dynamic7dof/dynamic_regress/python/pipeline_identification.py:1)：只负责辨识阶段
+- [python/pipeline_postprocess.py](/home/xpm/projects/dynamic7dof/dynamic_regress/python/pipeline_postprocess.py:1)：只负责评估、导出、补偿和结果落盘
+
+所以对外命令行入口不变，但内部职责已经分清。
+
+### 选项总览
+
+| 选项 | 默认值 | 含义 |
+| --- | --- | --- |
+| `--robot-name` | `None` | 机器人名字标签，主要用于结果记录和日志展示。一般可以不传。 |
+| `--identification-mode` | `rigid_body_friction` | 当前辨识模式。现版本只支持“刚体动力学 + 摩擦”联合辨识。 |
+| `--parameterization {base,full}` | `base` | 参数化方式。`base` 只保留可辨识基参数，工程上更稳；`full` 保留完整物理参数，更适合物理解释、payload 等效和约束求解。 |
+| `--solver-method {ols,wls,ridge,constrained}` | `ridge` | 求解器类型。`ols` 是普通最小二乘，`wls` 是加权最小二乘，`ridge` 是带 L2 正则的稳健版本，`constrained` 是带物理可行性约束的求解器。 |
+| `--data-source {auto,synthetic,real}` | `auto` | 数据来源。`auto` 会自动判断优先使用哪类数据；`synthetic` 用模型合成数据；`real` 用真实采集数据。 |
+| `--real-data-dir PATH` | `datasets/real/raw` | 真实数据原始 CSV 所在目录。只在 `--data-source real` 时生效。 |
+| `--real-torque-source {sensed,sensor}` | `sensed` | 真实数据里使用哪一列扭矩作为辨识目标。`sensed` 对应 `q*_SensedTorque`，`sensor` 对应 `q*_JointSensorTorque`，后者会自动乘以标定比例。 |
+| `--sampling-freq FLOAT` | `100.0` | 数据采样频率，单位 Hz。用于时间轴重建、滤波和导数处理。 |
+| `--cutoff-hz FLOAT` | `15.0` | 低通滤波截止频率，单位 Hz。主要影响真实数据处理阶段。 |
+| `--urdf-path PATH` | `models/05_urdf/urdf/05_urdf_temp.urdf` | 用于构建 Pinocchio 模型的 URDF 路径。 |
+| `--config-path PATH` | `None` | 可选 YAML 配置文件路径。用于补充 active joints、base/ee link 等元信息。 |
+| `--export-class-name NAME` | `sevendofDynamics` | 导出的 C++ 类名，同时决定生成的 `.h/.cpp` 文件名。 |
+| `--gravity VALUE` | 代码默认 `"[9.81, 0, 0]"` | 运行时重力向量，表达在 base 坐标系下。可传预设关键字或逗号分隔三元组。 |
+| `--payload-mode {none,lumped_last_link,external_wrench,augmented_link}` | `none` | payload 处理模式。`lumped_last_link` 把 payload 等效到末端连杆参数，`external_wrench` 作为独立外加项，`augmented_link` 当前主要是预留口。 |
+| `--payload-mass FLOAT` | `0.0` | payload 质量，单位 kg。大于 0 时才会真正构造 payload 模型。 |
+| `--payload-com CX CY CZ` | `None` | payload 质心位置，三维坐标。通常要求表达在 payload 参考连杆坐标系中。 |
+| `--payload-reference-link NAME` | `None` | payload 挂接的参考连杆。默认会落到机器人末端执行器连杆。 |
+| `--payload-com-frame NAME` | `None` | `payload-com` 所在坐标系名。未显式给出时默认等于 `payload-reference-link`。 |
+| `--subtract-known-payload-gravity` | 关闭 | 如果已经知道 payload 质量和质心，则先从测量扭矩里扣除 payload 重力项，再辨识机器人本体参数。 |
+
+### `--gravity` 可用格式
+
+`--gravity` 支持两种写法：
+
+1. 预设关键字
+
+- `upright`：`[0, 0, -9.81]`
+- `inverted`：`[0, 0, 9.81]`
+- `wall_x` 或 `wall_x_neg`：`[-9.81, 0, 0]`
+- `wall_x_pos`：`[9.81, 0, 0]`
+- `wall_y` 或 `wall_y_neg`：`[0, -9.81, 0]`
+- `wall_y_pos`：`[0, 9.81, 0]`
+
+2. 直接传 base 坐标系下的三维向量
+
+```bash
+python run_pipeline.py --gravity "0,0,-9.81"
+python run_pipeline.py --gravity "6.93,0,-6.93"
+```
+
+说明：
+
+- 这里的重力是“运行时输入”，不是重新辨识条件。
+- 只要参数模型是一致的，切换安装方式时只需要改 `--gravity`，不需要重新辨识本体参数。
+
+### 常用运行组合
+
+#### 1. 日常推荐：真实数据 + `ridge + base`
+
+```bash
+python run_pipeline.py \
+  --data-source real \
+  --real-torque-source sensed \
+  --parameterization base \
+  --solver-method ridge
+```
+
+适合：
+
+- 工程上先得到稳定可用的结果
+- 先关注 RMSE、泛化误差和 C++ 导出结果
+
+#### 2. 物理一致性优先：真实数据 + `constrained + full`
+
+```bash
+python run_pipeline.py \
+  --data-source real \
+  --real-torque-source sensed \
+  --parameterization full \
+  --solver-method constrained
+```
+
+适合：
+
+- 需要完整物理参数
+- 后续要做 payload 等效、物理可行性检查、重力变向复用
+
+#### 3. 指定侧装或倒装重力方向
+
+```bash
+python run_pipeline.py --gravity wall_x
+python run_pipeline.py --gravity inverted
+python run_pipeline.py --gravity "0,0,-9.81"
+```
+
+#### 4. 带固定 payload 做辨识前重力扣除
+
+```bash
+python run_pipeline.py \
+  --data-source real \
+  --parameterization full \
+  --solver-method constrained \
+  --payload-mode lumped_last_link \
+  --payload-mass 1.25 \
+  --payload-com 0.0 0.0 0.08 \
+  --payload-reference-link tool0 \
+  --subtract-known-payload-gravity
+```
+
+适合：
+
+- 已知 payload 质量与质心
+- 目标是辨识机器人本体无负载参数，而不是把 payload 污染进本体参数里
+
+### 结果文件怎么看
+
+`run_pipeline.py` 运行后，通常会输出或更新这些结果：
+
+- `datasets/identified/theta_hat_*.json`
+- `datasets/identified/evaluation_*_splits.json`
+- `datasets/residual/compensation_result_*.json`
+- `output/*.h`
+- `output/*.cpp`
+
+其中重点看：
+
+- `parameterization`
+- `solver_method`
+- `gravity_config`
+- `physical_sanity`
+- `train_rmse / val_rmse / test_rmse`
+- `possible_overfit`
+
+如果你要直接比较两种辨识口径，不要手工跑两遍后再自己抄表，建议直接用：
+
+```bash
+python python/compare_solver_modes.py --data-source real --real-torque-source sensed
+```
+
+它会并排比较：
+
+- `ridge + base`
+- `constrained + full`
+
+并输出：
+
+- `train/val/test RMSE`
+- `physical sanity`
+- 每关节质量/惯量可行性
+- 导出到 `output` 后的单样本扭矩对比
+
 ## 数据目录
 
 ```text

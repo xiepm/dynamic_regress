@@ -1,0 +1,203 @@
+{
+  "generated_at": "2026-04-28T15:12:02",
+  "data_source": "real",
+  "real_torque_source": "sensed",
+  "gravity_base": [
+    9.81,
+    0.0,
+    0.0
+  ],
+  "summary_table": [
+    {
+      "mode": "ridge+base",
+      "train_rmse": 0.8038042618340762,
+      "val_rmse": 0.7951129473772824,
+      "test_rmse": 0.8058375562133995,
+      "physical_sanity": false,
+      "optimizer_success": true
+    },
+    {
+      "mode": "constrained+full",
+      "train_rmse": 1.277292909273924,
+      "val_rmse": 1.2784592570413722,
+      "test_rmse": 1.2815131927709407,
+      "physical_sanity": true,
+      "optimizer_success": true
+    }
+  ],
+  "joint_compare": [
+    {
+      "joint": "J1",
+      "ridge_mass": 0.0,
+      "ridge_mass_positive": false,
+      "ridge_inertia_psd": true,
+      "ridge_triangle_ok": false,
+      "ridge_min_inertia_eig": 0.0,
+      "constrained_mass": 0.11542582207733611,
+      "constrained_mass_positive": true,
+      "constrained_inertia_psd": true,
+      "constrained_triangle_ok": true,
+      "constrained_min_inertia_eig": 0.17519138230409512
+    },
+    {
+      "joint": "J2",
+      "ridge_mass": 0.0,
+      "ridge_mass_positive": false,
+      "ridge_inertia_psd": false,
+      "ridge_triangle_ok": false,
+      "ridge_min_inertia_eig": -0.7763446528196991,
+      "constrained_mass": 0.6719330718228391,
+      "constrained_mass_positive": true,
+      "constrained_inertia_psd": true,
+      "constrained_triangle_ok": true,
+      "constrained_min_inertia_eig": 0.2910863749179233
+    },
+    {
+      "joint": "J3",
+      "ridge_mass": 0.0,
+      "ridge_mass_positive": false,
+      "ridge_inertia_psd": false,
+      "ridge_triangle_ok": false,
+      "ridge_min_inertia_eig": -5.5692182404504695,
+      "constrained_mass": 0.20006157670088812,
+      "constrained_mass_positive": true,
+      "constrained_inertia_psd": true,
+      "constrained_triangle_ok": true,
+      "constrained_min_inertia_eig": 0.49189385153760673
+    },
+    {
+      "joint": "J4",
+      "ridge_mass": 0.0,
+      "ridge_mass_positive": false,
+      "ridge_inertia_psd": false,
+      "ridge_triangle_ok": false,
+      "ridge_min_inertia_eig": -5.789792133485818,
+      "constrained_mass": 0.09749786405116692,
+      "constrained_mass_positive": true,
+      "constrained_inertia_psd": true,
+      "constrained_triangle_ok": true,
+      "constrained_min_inertia_eig": 0.28042567753990305
+    },
+    {
+      "joint": "J5",
+      "ridge_mass": 0.0,
+      "ridge_mass_positive": false,
+      "ridge_inertia_psd": false,
+      "ridge_triangle_ok": false,
+      "ridge_min_inertia_eig": -2.406306284703944,
+      "constrained_mass": 0.0047391423080128635,
+      "constrained_mass_positive": true,
+      "constrained_inertia_psd": true,
+      "constrained_triangle_ok": true,
+      "constrained_min_inertia_eig": 0.001919268887849378
+    },
+    {
+      "joint": "J6",
+      "ridge_mass": 0.0,
+      "ridge_mass_positive": false,
+      "ridge_inertia_psd": false,
+      "ridge_triangle_ok": false,
+      "ridge_min_inertia_eig": -0.026151890444569302,
+      "constrained_mass": 0.15304255659646399,
+      "constrained_mass_positive": true,
+      "constrained_inertia_psd": true,
+      "constrained_triangle_ok": true,
+      "constrained_min_inertia_eig": 0.0017606230940548195
+    },
+    {
+      "joint": "J7",
+      "ridge_mass": 0.0,
+      "ridge_mass_positive": false,
+      "ridge_inertia_psd": false,
+      "ridge_triangle_ok": false,
+      "ridge_min_inertia_eig": -0.05612879968787295,
+      "constrained_mass": 0.015680002993016907,
+      "constrained_mass_positive": true,
+      "constrained_inertia_psd": true,
+      "constrained_triangle_ok": true,
+      "constrained_min_inertia_eig": 0.046200437577348714
+    }
+  ],
+  "sample_compare": [
+    {
+      "index": "J1",
+      "tau_measured": 16.923559440559217,
+      "ridge_tau_pred": 15.017492123337188,
+      "constrained_tau_pred": 15.657696067195419,
+      "ridge_error": 1.9060673172220284,
+      "constrained_error": 1.265863373363798
+    },
+    {
+      "index": "J2",
+      "tau_measured": 11.300027972028069,
+      "ridge_tau_pred": 10.714199420415227,
+      "constrained_tau_pred": 9.579967300915099,
+      "ridge_error": 0.5858285516128419,
+      "constrained_error": 1.7200606711129698
+    },
+    {
+      "index": "J3",
+      "tau_measured": -1.4882447552447027,
+      "ridge_tau_pred": -2.1626209156731724,
+      "constrained_tau_pred": -1.6431437331276468,
+      "ridge_error": 0.6743761604284697,
+      "constrained_error": 0.15489897788294416
+    },
+    {
+      "index": "J4",
+      "tau_measured": 0.6666013986013573,
+      "ridge_tau_pred": -0.10234135017301915,
+      "constrained_tau_pred": -0.43427068957863657,
+      "ridge_error": 0.7689427487743764,
+      "constrained_error": 1.1008720881799938
+    },
+    {
+      "index": "J5",
+      "tau_measured": -1.3203776223777322,
+      "ridge_tau_pred": -1.1644675282105508,
+      "constrained_tau_pred": -0.8601359460809059,
+      "ridge_error": -0.15591009416718138,
+      "constrained_error": -0.4602416762968262
+    },
+    {
+      "index": "J6",
+      "tau_measured": -0.5379650349651675,
+      "ridge_tau_pred": -0.3875398654687663,
+      "constrained_tau_pred": -0.19785216855240023,
+      "ridge_error": -0.15042516949640117,
+      "constrained_error": -0.3401128664127672
+    },
+    {
+      "index": "J7",
+      "tau_measured": -1.497258741258724,
+      "ridge_tau_pred": -1.1511572548210065,
+      "constrained_tau_pred": -0.8603287018262455,
+      "ridge_error": -0.34610148643771743,
+      "constrained_error": -0.6369300394324784
+    }
+  ],
+  "ridge_overfit": {
+    "train_rmse": 0.8038042618340762,
+    "val_rmse": 0.7951129473772824,
+    "test_rmse": 0.8058375562133995,
+    "val_to_train_rmse_ratio": 0.9891872749754246,
+    "test_to_train_rmse_ratio": 1.0025295889507775,
+    "possible_overfit": false
+  },
+  "constrained_overfit": {
+    "train_rmse": 1.277292909273924,
+    "val_rmse": 1.2784592570413722,
+    "test_rmse": 1.2815131927709407,
+    "val_to_train_rmse_ratio": 1.0009131404073253,
+    "test_to_train_rmse_ratio": 1.0033040843383494,
+    "possible_overfit": false
+  },
+  "ridge_export": {
+    "project_header": "/home/xpm/projects/dynamic7dof/dynamic_regress/output/solver_mode_compare/ridge_base/ridgeBaseCompareDynamics.h",
+    "project_cpp": "/home/xpm/projects/dynamic7dof/dynamic_regress/output/solver_mode_compare/ridge_base/ridgeBaseCompareDynamics.cpp"
+  },
+  "constrained_export": {
+    "project_header": "/home/xpm/projects/dynamic7dof/dynamic_regress/output/solver_mode_compare/constrained_full/constrainedFullCompareDynamics.h",
+    "project_cpp": "/home/xpm/projects/dynamic7dof/dynamic_regress/output/solver_mode_compare/constrained_full/constrainedFullCompareDynamics.cpp"
+  }
+}

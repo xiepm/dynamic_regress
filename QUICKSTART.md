@@ -374,3 +374,8 @@ python -c "import sys; print(sys.executable)"
 1. `test` 是否明显比 `train` 差很多
 2. 哪个关节误差最大
 3. `MLP` 是否比线性补偿显著更好
+
+
+
+
+验证：python3 output/test/query_output_torque.py --export-class-name sevendofDynamics --show-physical

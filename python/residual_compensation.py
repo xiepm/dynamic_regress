@@ -1,5 +1,10 @@
 """
-Step 7-8: Residual analysis and lightweight compensation.
+残差分析与补偿模块。
+
+这个模块对应流水线的 Step 7-8，由 `run_pipeline.py` 在主动力学参数辨识结束后调用。
+它复用 `identify_parameters.py` 的 torque 预测结果，把“模型解释不了的剩余误差”整理成
+残差学习问题，再分别交给线性 ridge 补偿器和 MLP 补偿器建模，用于评估主模型之外的
+非线性误差是否还能被进一步吸收。
 """
 
 from __future__ import annotations
@@ -14,13 +19,43 @@ from sklearn.preprocessing import StandardScaler
 
 
 class ResidualAnalyzer:
-    """Analyze residuals produced by the same identification model."""
+    """
+    负责从主辨识模型中提取残差并构造残差特征。
+
+    这个类只做“数据准备”，不参与任何参数训练。这样设计是为了让线性补偿器、MLP
+    补偿器等下游模型共享同一套残差定义和特征工程，避免不同补偿器之间比较口径不一致。
+    """
 
     def __init__(self, robot_model):
+        """
+        保存机器人维度信息，供残差列构造使用。
+
+        Parameters
+        ----------
+        robot_model : RobotModel
+            已加载好的机器人模型对象。
+        """
         self.robot_model = robot_model
         self.num_joints = robot_model.num_joints
 
     def compute_residuals(self, df: pd.DataFrame, identifier, result: Dict) -> pd.DataFrame:
+        """
+        计算观测力矩与主模型预测力矩之间的残差。
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            待计算残差的数据集。
+        identifier : ParameterIdentifier
+            主动力学辨识器。
+        result : Dict
+            主辨识结果字典。
+
+        Returns
+        -------
+        pd.DataFrame
+            在原始数据基础上新增 `tau_pred_i` 和 `residual_tau_i` 的表。
+        """
         tau_pred = identifier.predict_torques(df, result)
         tau_meas = np.column_stack([df[f'tau_{i}'].values for i in range(1, self.num_joints + 1)])
         residual = tau_meas - tau_pred
@@ -32,15 +67,28 @@ class ResidualAnalyzer:
         return frame
 
     def feature_engineering(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        为残差补偿模型生成衍生特征。
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            至少包含 `q_i`、`dq_i`、`ddq_i` 和残差列的数据表。
+
+        Returns
+        -------
+        pd.DataFrame
+            增加绝对值、乘积、三角函数和相邻关节耦合项后的特征表。
+        """
         frame = df.copy()
         for joint_idx in range(1, self.num_joints + 1):
             frame[f'abs_dq_{joint_idx}'] = np.abs(df[f'dq_{joint_idx}'])
             frame[f'abs_ddq_{joint_idx}'] = np.abs(df[f'ddq_{joint_idx}'])
             frame[f'q_dq_prod_{joint_idx}'] = df[f'q_{joint_idx}'] * df[f'dq_{joint_idx}']
-            # 修复：增加 sin/cos 位置特征，增强对周期性和非线性摩擦的表达能力。
+            # sin/cos 特征可以更自然地表达周期性位姿依赖误差，而不是把角度当线性量。
             frame[f'sin_q_{joint_idx}'] = np.sin(df[f'q_{joint_idx}'])
             frame[f'cos_q_{joint_idx}'] = np.cos(df[f'q_{joint_idx}'])
-        # 修复：增加相邻关节速度交叉项，提升耦合摩擦/传动效应的表达能力。
+        # 相邻关节速度乘积用来近似耦合摩擦、柔性传动或串联关节联动带来的残差。
         for joint_idx in range(1, self.num_joints):
             frame[f'dq_pair_{joint_idx}_{joint_idx + 1}'] = df[f'dq_{joint_idx}'] * df[f'dq_{joint_idx + 1}']
         frame['motion_magnitude'] = np.linalg.norm(
@@ -50,6 +98,27 @@ class ResidualAnalyzer:
         return frame
 
     def build_residual_dataset(self, df: pd.DataFrame, identifier, result: Dict, test_split: float = 0.2, val_split: float = 0.1) -> Dict:
+        """
+        从整张数据表构造 train/val/test 残差学习数据集。
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            原始数据表。
+        identifier : ParameterIdentifier
+            主辨识器。
+        result : Dict
+            主辨识结果。
+        test_split : float
+            测试集占比。
+        val_split : float
+            验证集占比。
+
+        Returns
+        -------
+        Dict
+            含 `train`、`val`、`test` 三份特征表的字典。
+        """
         residual_df = self.compute_residuals(df, identifier, result)
         feature_df = self.feature_engineering(residual_df)
 
@@ -72,9 +141,23 @@ class ResidualAnalyzer:
 
 
 class ResidualCompensator:
-    """Linear residual model for quick sanity checks."""
+    """
+    线性 ridge 残差补偿器。
+
+    这个类的目标不是追求最强拟合能力，而是提供一个可解释、训练快、便于做 sanity check
+    的线性基线。它持有训练得到的权重、偏置和特征列名，这些状态会在 `train_*` 方法中
+    初始化，在 `evaluate_compensator()` 中复用。
+    """
 
     def __init__(self, num_joints: int):
+        """
+        初始化线性补偿器。
+
+        Parameters
+        ----------
+        num_joints : int
+            主动关节数。
+        """
         self.num_joints = num_joints
         self.weights = None
         self.bias = None
@@ -82,6 +165,7 @@ class ResidualCompensator:
         self.lambda_reg = None
 
     def _feature_columns(self, df: pd.DataFrame):
+        """选出当前补偿器会使用的特征列名。"""
         return [
             col for col in df.columns
             if col.startswith('q_') or col.startswith('dq_') or col.startswith('ddq_')
@@ -91,20 +175,36 @@ class ResidualCompensator:
         ]
 
     def _fit_ridge(self, X: np.ndarray, y: np.ndarray, lambda_reg: float) -> tuple[np.ndarray, np.ndarray]:
+        """求解带偏置项的多输出 ridge 回归。"""
         X_aug = np.column_stack([X, np.ones(len(X))])
         regularizer = np.eye(X_aug.shape[1], dtype=float) * lambda_reg
-        # 不正则化偏置项，避免整体残差均值被强行压缩。
+        # 偏置项不参与正则化，否则容易把整体残差均值错误地往 0 拉。
         regularizer[-1, -1] = 0.0
         theta = np.linalg.solve(X_aug.T @ X_aug + regularizer, X_aug.T @ y)
         return theta[:-1], theta[-1]
 
     def train_linear_compensator(self, df_train: pd.DataFrame, lambda_reg: float = 1e-2) -> Dict:
+        """
+        在训练集上拟合线性 ridge 残差补偿器。
+
+        Parameters
+        ----------
+        df_train : pd.DataFrame
+            训练特征表。
+        lambda_reg : float
+            L2 正则强度。
+
+        Returns
+        -------
+        Dict
+            训练 MAE、特征数和正则参数等摘要信息。
+        """
         self.feature_cols = self._feature_columns(df_train)
         residual_cols = [f'residual_tau_{i + 1}' for i in range(self.num_joints)]
         X = df_train[self.feature_cols].values
         y = df_train[residual_cols].values
 
-        # 修复：使用带 L2 正则的岭回归，缓解高维线性特征在训练集上过拟合。
+        # 线性特征维度已经不低，直接 OLS 容易把训练集噪声也学进去。
         self.weights, self.bias = self._fit_ridge(X, y, lambda_reg=lambda_reg)
         self.lambda_reg = lambda_reg
 
@@ -122,6 +222,19 @@ class ResidualCompensator:
         }
 
     def train_with_cross_validation(self, df_train: pd.DataFrame) -> Dict:
+        """
+        用 5 折交叉验证自动选择 ridge 正则强度。
+
+        Parameters
+        ----------
+        df_train : pd.DataFrame
+            训练特征表。
+
+        Returns
+        -------
+        Dict
+            最优 lambda 下的训练摘要，并附带每个候选值的交叉验证分数。
+        """
         candidate_lambdas = [1e-4, 1e-3, 1e-2, 1e-1, 1.0]
         self.feature_cols = self._feature_columns(df_train)
         residual_cols = [f'residual_tau_{i + 1}' for i in range(self.num_joints)]
@@ -162,6 +275,24 @@ class ResidualCompensator:
         return train_info
 
     def evaluate_compensator(self, df_test: pd.DataFrame) -> Dict:
+        """
+        评估线性补偿器在指定数据集上的效果。
+
+        Parameters
+        ----------
+        df_test : pd.DataFrame
+            待评估特征表。
+
+        Returns
+        -------
+        Dict
+            含全局与每关节 MAE/RMSE/提升率的评估结果。
+
+        Raises
+        ------
+        RuntimeError
+            当模型尚未训练时抛出。
+        """
         if self.weights is None:
             raise RuntimeError("Compensator not trained")
 
@@ -213,7 +344,13 @@ class ResidualCompensator:
 
 
 class MLPCompensator:
-    """Simple multi-output MLP residual model as the default nonlinear compensator."""
+    """
+    多输出 MLP 残差补偿器。
+
+    它是当前主流程里的默认非线性补偿模型，目标是在不过多引入工程复杂度的前提下，
+    给线性基线提供一个更强的非线性对照。类内部持有输入/输出标准化器和训练好的
+    `MLPRegressor`，以保证训练和评估阶段使用完全一致的数据变换。
+    """
 
     def __init__(
         self,
@@ -223,6 +360,22 @@ class MLPCompensator:
         max_iter: int = 500,
         random_state: int = 42,
     ):
+        """
+        初始化 MLP 补偿器及其超参数。
+
+        Parameters
+        ----------
+        num_joints : int
+            主动关节数。
+        hidden_layer_sizes : tuple[int, ...]
+            隐藏层结构。
+        alpha : float
+            L2 正则强度。
+        max_iter : int
+            最大训练轮数。
+        random_state : int
+            随机种子。
+        """
         self.num_joints = num_joints
         self.hidden_layer_sizes = hidden_layer_sizes
         self.alpha = alpha
@@ -234,6 +387,7 @@ class MLPCompensator:
         self.model = None
 
     def _feature_columns(self, df: pd.DataFrame):
+        """选出 MLP 会消费的输入特征列。"""
         return [
             col for col in df.columns
             if col.startswith('q_') or col.startswith('dq_') or col.startswith('ddq_')
@@ -243,12 +397,25 @@ class MLPCompensator:
         ]
 
     def train(self, df_train: pd.DataFrame) -> Dict:
+        """
+        在训练集上拟合 MLP 残差补偿器。
+
+        Parameters
+        ----------
+        df_train : pd.DataFrame
+            训练特征表。
+
+        Returns
+        -------
+        Dict
+            训练 MAE、隐藏层结构、迭代次数等训练摘要。
+        """
         self.feature_cols = self._feature_columns(df_train)
         residual_cols = [f'residual_tau_{i + 1}' for i in range(self.num_joints)]
         X = df_train[self.feature_cols].values
         y = df_train[residual_cols].values
 
-        # 新增：MLP 对输入/输出尺度更敏感，先标准化能显著提升训练稳定性。
+        # MLP 对量纲和数值范围很敏感；输入输出一起标准化，训练更稳定。
         X_scaled = self.x_scaler.fit_transform(X)
         y_scaled = self.y_scaler.fit_transform(y)
         self.model = MLPRegressor(
@@ -287,6 +454,24 @@ class MLPCompensator:
         }
 
     def evaluate(self, df_test: pd.DataFrame) -> Dict:
+        """
+        评估 MLP 补偿器在指定数据集上的效果。
+
+        Parameters
+        ----------
+        df_test : pd.DataFrame
+            待评估特征表。
+
+        Returns
+        -------
+        Dict
+            含全局与每关节 MAE/RMSE/提升率的结果字典。
+
+        Raises
+        ------
+        RuntimeError
+            当模型尚未训练时抛出。
+        """
         if self.model is None:
             raise RuntimeError("MLP compensator not trained")
 
@@ -336,6 +521,30 @@ class MLPCompensator:
             'joint_rmse': {f'joint_{idx + 1}': float(value) for idx, value in enumerate(joint_rmse)},
             'joint_baseline_mae': {f'joint_{idx + 1}': float(value) for idx, value in enumerate(baseline_joint_mae)},
             'joint_improvement_percent': {f'joint_{idx + 1}': float(value) for idx, value in enumerate(joint_improvement_percent)},
+        }
+
+    def export_state(self) -> Dict:
+        """
+        导出 C++ 前向推理所需的全部 MLP 状态。
+
+        这里不保存 sklearn 对象本身，而是把标准化参数、权重和偏置转成普通
+        Python 列表，方便代码生成器展开成 controller 侧可直接编译的静态数组。
+        """
+        if self.model is None:
+            raise RuntimeError("MLP compensator not trained")
+        if self.feature_cols is None:
+            raise RuntimeError("MLP feature columns are not initialized")
+
+        return {
+            'type': 'mlp',
+            'activation': 'relu',
+            'feature_cols': list(self.feature_cols),
+            'x_mean': self.x_scaler.mean_.astype(float).tolist(),
+            'x_scale': self.x_scaler.scale_.astype(float).tolist(),
+            'y_mean': self.y_scaler.mean_.astype(float).tolist(),
+            'y_scale': self.y_scaler.scale_.astype(float).tolist(),
+            'coefs': [coef.astype(float).tolist() for coef in self.model.coefs_],
+            'intercepts': [bias.astype(float).tolist() for bias in self.model.intercepts_],
         }
 
 
