@@ -35,6 +35,38 @@
 - `yaml` 配置文件是可选的
 - 数据来源只有两类：`synthetic` 和 `real`
 - `raw / normalized / processed` 只是数据处理阶段，不是新的数据类型
+- 导出的 C++ 动力学类默认保持旧版 `LEGACY_RAW` 行为，同时可选启用内部 `ROBUST_NO_TIME` 运行模式
+
+## Runtime RobustNoTime 说明
+
+导出后的 `sevendofDynamics.h/.cpp` 现在支持一个默认关闭的内部鲁棒层：
+
+- `LEGACY_RAW`：完全保持旧版行为
+- `ROBUST_NO_TIME`：在不改变原有虚函数签名的前提下，增加输入检查、样本级平滑、`ddq` 幅值限幅、摩擦状态机、静止保持、`M/C` 门控和最近一次分项诊断 getter
+- `ROBUST_TIMED_RESERVED`：仅预留，将来如果有可靠 `timestamp/dt` 或内部时间源，再扩展成真正的 time-aware 模式
+
+`RobustNoTime` 可以做：
+
+- 输入合法性检查
+- 样本级平滑
+- `ddq` 幅值限幅
+- 摩擦状态机
+- 静止保持
+- `M/C` 门控
+- 分项诊断输出
+
+`RobustNoTime` 不能严格做：
+
+- Hz 意义上的低通滤波
+- 从 `q` 推导真实 `dq`
+- 从 `dq` 推导真实 `ddq`
+- 基于物理时间的 rate limit
+- 严格时间常数滤波
+- 真实 alpha-beta / Kalman 状态估计
+
+离线辨识侧也新增了一个可选 `--robust-identification` 开关。默认关闭；开启后会在 processed dataframe 中追加
+`q_used_i / dq_used_i / ddq_used_i / tau_used_i / friction_sign_i / hold_indicator_i / motion_state_i / sample_type`
+这些增强列，而不破坏原有列契约。
 
 ## 关于 URDF 中 damping / friction 为 0
 
@@ -348,6 +380,39 @@ python run_pipeline.py \
 - `output/*.h`
 - `output/*.cpp`
 
+### `output` 代码导出时有哪些可选项
+
+当前 `output/*.cpp` / `output/*.h` 的导出由 `run_pipeline.py` 统一触发，最常影响生成结果的是下面这些选项：
+
+| 选项 | 是否影响导出的 `output` 代码 | 说明 |
+| --- | --- | --- |
+| `--export-class-name NAME` | 是 | 决定导出的 C++ 类名和文件名，例如 `sevendofDynamics.cpp/.h`。 |
+| `--gravity VALUE` | 是 | 作为默认重力向量写进导出代码的初始值；运行时仍可通过 `setGravityVector()` 覆盖。 |
+| `--parameterization {base,full}` | 是 | 决定被识别并写入导出代码的参数口径。`base` 更稳，`full` 更适合物理解释和 payload 等效。 |
+| `--solver-method {ols,wls,ridge,constrained}` | 是 | 会影响最终识别到的参数，从而影响导出代码数值。 |
+| `--payload-mode {none,lumped_last_link,external_wrench,augmented_link}` | 是 | 只对导出阶段真正支持 `none` 和 `lumped_last_link`。`external_wrench` 当前主要用于 Python 运行时，不直接导出进 C++。 |
+| `--payload-mass FLOAT` + `--payload-com CX CY CZ` | 有条件影响 | 当 `--payload-mode lumped_last_link` 时，会把已知 payload 直接 lump 到末端参数后再导出，生成“默认带 payload”的代码。 |
+| `--subtract-known-payload-gravity` | 否 | 这一步只影响辨识前的数据预处理，不会单独在导出代码里生成“扣除逻辑”。 |
+
+关于 payload，需要区分两种使用方式：
+
+- 导出时就已知 payload：
+  用 `--payload-mode lumped_last_link --payload-mass --payload-com`，生成的 `output` 代码默认就带这个 payload。
+- 导出时不知道 payload，运行时才知道：
+  不需要重生成代码。当前生成版 `sevendofDynamics` 已重新支持通过 `calculateEstimateJointToqrues(..., parms, ...)` 这类接口，在运行时通过 RTOS 风格 `parms` 注入 payload 质量和质心。
+
+关于非线性补偿：
+
+- 主流程会训练线性残差补偿和 MLP 补偿，并把评估结果写入 `datasets/residual/compensation_result_*.json`。
+- 但当前导出的 `output/*.cpp` 仍然默认是纯物理主模型导出，不包含非线性补偿项。
+- 生成文件头部元数据里会看到：
+
+```text
+nonlinear_compensation: disabled_for_export
+```
+
+- 也就是说，现在可以“评估 MLP 有多大提升”，但不会自动把 MLP 一起固化到 `output` 代码里。
+
 其中重点看：
 
 - `parameterization`
@@ -374,6 +439,110 @@ python python/compare_solver_modes.py --data-source real --real-torque-source se
 - `physical sanity`
 - 每关节质量/惯量可行性
 - 导出到 `output` 后的单样本扭矩对比
+
+## 常见测试命令
+
+下面这些命令是现在最常用的“打开方式”和测试口令，建议优先直接复制运行。
+
+### 1. 运行主流程并生成最新 `output` 代码
+
+```bash
+conda run -n urdfly python run_pipeline.py --data-source real --export-class-name sevendofDynamics
+```
+
+如果你希望导出时就把已知 payload lump 进默认参数：
+
+```bash
+conda run -n urdfly python run_pipeline.py \
+  --data-source real \
+  --parameterization full \
+  --solver-method constrained \
+  --payload-mode lumped_last_link \
+  --payload-mass 1.25 \
+  --payload-com 0 0 0.08 \
+  --payload-reference-link end_link \
+  --export-class-name sevendofDynamics
+```
+
+### 2. 检查当前生成代码和 Python 参考实现是否一致
+
+这个测试会重新走一遍参考识别流程，再把生成的 C++ 逐样本和 Python 对比。
+
+```bash
+conda run -n pinocchio_py python output/test/test_cpp_consistency.py --export-class-name sevendofDynamics --sample-limit 8
+```
+
+### 3. 测最终生成代码，不重生成，默认无 payload 覆盖
+
+这个测试直接编译当前已经存在的 `output/sevendofDynamics.cpp`，验证“最终文件”本身。
+
+```bash
+conda run -n pinocchio_py python output/test/test_output.py --export-class-name sevendofDynamics --sample-limit 8
+```
+
+### 4. 测最终生成代码，运行时注入 payload 质量和质心
+
+这个测试不重生成代码，而是通过 RTOS 风格 `parms` 在运行时把 payload 注入最终导出的 C++。
+
+```bash
+conda run -n pinocchio_py python output/test/test_output.py \
+  --export-class-name sevendofDynamics \
+  --sample-limit 8 \
+  --payload-mass 1.25 \
+  --payload-com 0 0 0.08
+```
+
+### 5. 只测“运行时 payload 覆盖”这条链路是否正确
+
+如果你只关心“生成代码能不能在运行时接受 payload 输入”，可以直接跑这个更聚焦的测试：
+
+```bash
+conda run -n pinocchio_py python output/test/test_cpp_payload_override.py --export-class-name sevendofDynamics
+```
+
+### 6. 交互式单样本查询，不带 payload
+
+如果你已经激活环境，推荐直接这样开：
+
+```bash
+conda activate pinocchio_py
+python output/test/query_output_torque.py --export-class-name sevendofDynamics
+```
+
+如果你想继续用 `conda run`，为了保留交互式 stdin，建议：
+
+```bash
+conda run --no-capture-output -n pinocchio_py python output/test/query_output_torque.py --export-class-name sevendofDynamics
+```
+
+### 7. 交互式或命令行单样本查询，带 payload 运行时覆盖
+
+命令行一次性传完：
+
+```bash
+conda run -n pinocchio_py python output/test/query_output_torque.py \
+  --export-class-name sevendofDynamics \
+  --gravity 9.81 0 0 \
+  --q 0 0 0 0 0 0 0 \
+  --dq 0 0 0 0 0 0 0 \
+  --ddq 0 0 0 0 0 0 0 \
+  --payload-mass 1.25 \
+  --payload-com 0 0 0.08
+```
+
+或者进入交互模式后，在脚本提示里输入 payload 质量和质心。
+
+### 8. 检查 payload 和重力运行时扩展是否正常
+
+```bash
+conda run -n urdfly python output/test/test_runtime_extensions.py
+```
+
+这个脚本会检查：
+
+- gravity preset 是否正确
+- payload 点质量转 10 维刚体参数是否符合平行轴定理
+- `lumped_last_link` 和 `external_wrench` 在准静态条件下是否一致
 
 ## 数据目录
 

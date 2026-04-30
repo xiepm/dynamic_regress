@@ -34,9 +34,9 @@ void readJointVector(std::istream& input, EcRealVector& values)
 
 int main(int argc, char** argv)
 {
-    if (argc != 5)
+    if (argc != 5 && argc != 6)
     {
-        std::cerr << "Usage: " << argv[0] << " <input.txt> <gx> <gy> <gz>\n";
+        std::cerr << "Usage: " << argv[0] << " <input.txt> <gx> <gy> <gz> [params.txt]\n";
         return 2;
     }
 
@@ -44,6 +44,7 @@ int main(int argc, char** argv)
     const EcReal gx = std::stod(argv[2]);
     const EcReal gy = std::stod(argv[3]);
     const EcReal gz = std::stod(argv[4]);
+    const bool has_params_file = argc == 6;
 
     std::ifstream input(input_path);
     if (!input.is_open())
@@ -54,6 +55,7 @@ int main(int argc, char** argv)
 
     GENERATED_DYNAMICS_CLASS dynamics;
     dynamics.setGravityVector(gx, gy, gz);
+    dynamics.setUseExternalRuntimeParms(has_params_file);
 
     EcRealVector q;
     EcRealVector dq;
@@ -67,6 +69,21 @@ int main(int argc, char** argv)
     EcRealVector tauGravity;
     EcRealVector tauFriction;
     EcRealVector parms;
+
+    if (has_params_file)
+    {
+        std::ifstream parms_input(argv[5]);
+        if (!parms_input.is_open())
+        {
+            std::cerr << "Failed to open params file: " << argv[5] << "\n";
+            return 5;
+        }
+        EcReal value = 0.0;
+        while (parms_input >> value)
+        {
+            parms.push_back(value);
+        }
+    }
 
     std::cout << std::setprecision(17);
     std::string line;

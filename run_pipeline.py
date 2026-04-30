@@ -36,6 +36,8 @@ import pipeline_identification as pipeline_id
 import pipeline_postprocess as pipeline_post
 from process_measured_data import (
     MeasuredDataProcessor,
+    RobustIdentificationConfig,
+    add_robust_identification_columns,
     compute_excitation_diagnostics,
     create_synthetic_measured_data,
 )
@@ -82,7 +84,7 @@ REAL_TORQUE_UNIT_SCALE = {
 #
 # 命令行如果显式传了 `--gravity`，会覆盖这里的默认值；
 # 如果不传，就按这个代码里的默认安装方式运行。
-DEFAULT_GRAVITY_VECTOR = [9.81, 0.0, 0.0]
+DEFAULT_GRAVITY_VECTOR = [-9.81, 0.0, 0.0]
 
 # 默认真实数据扭矩来源。
 #
@@ -107,6 +109,7 @@ DEFAULT_EXPORT_CLASS_NAME = "sevendofDynamics"
 DEFAULT_PAYLOAD_MODE = PayloadMode.NONE.value
 SUPPORTED_SOLVER_METHODS = ('ols', 'wls', 'ridge', 'constrained')
 DEFAULT_SOLVER_METHOD = 'ridge'
+DEFAULT_ROBUST_IDENTIFICATION = False
 
 
 def _build_payload_model(
@@ -396,7 +399,13 @@ def _attach_gravity_columns(df: pd.DataFrame, gravity_vector) -> pd.DataFrame:
     return frame
 
 
-def _prepare_synthetic_dataset(robot_model, sampling_freq: float, cutoff_hz: float) -> pd.DataFrame:
+def _prepare_synthetic_dataset(
+    robot_model,
+    sampling_freq: float,
+    cutoff_hz: float,
+    *,
+    robust_identification: bool = False,
+) -> pd.DataFrame:
     # synthetic 分支保留，是为了两件事：
     # 1. 没有真实数据时，新人也能先把整条链路跑通；
     # 2. 改算法后可以快速做回归测试，确认是不是代码逻辑本身出了问题。
@@ -425,6 +434,12 @@ def _prepare_synthetic_dataset(robot_model, sampling_freq: float, cutoff_hz: flo
     proc_path = proc_dir / "synthetic_panda_run01_proc.csv"
     df_processed = processor.clean_and_export(df_diff, str(proc_path))
     df_processed = _attach_gravity_columns(df_processed, robot_model.gravity_vector)
+    if robust_identification:
+        df_processed = add_robust_identification_columns(
+            df_processed,
+            robot_model.num_joints,
+            RobustIdentificationConfig(enabled=True),
+        )
     df_processed.to_csv(proc_path, index=False)
     df_processed['source_file'] = raw_path.name
     return df_processed
@@ -436,6 +451,8 @@ def _prepare_real_dataset(
     sampling_freq: float,
     cutoff_hz: float,
     torque_source: str,
+    *,
+    robust_identification: bool = False,
 ) -> pd.DataFrame:
     # real 分支专门负责“批量读取真实 CSV -> 统一格式 -> 清洗 -> 合并”。
     # 注意这里假设目录中的文件格式一致；如果后续出现不同采集协议，
@@ -496,6 +513,12 @@ def _prepare_real_dataset(
             # 这里做一个全局偏移，避免多个文件合并后轨迹编号冲突。
             df_processed_single['trajectory_id'] = df_processed_single['trajectory_id'] + trajectory_offset
             trajectory_offset = int(df_processed_single['trajectory_id'].max()) + 1
+        if robust_identification:
+            df_processed_single = add_robust_identification_columns(
+                df_processed_single,
+                robot_model.num_joints,
+                RobustIdentificationConfig(enabled=True),
+            )
         df_processed_single.to_csv(processed_path, index=False)
         processed_frames.append(df_processed_single)
 
@@ -1302,6 +1325,7 @@ def run_pipeline(
     payload_reference_link: str | None = None,
     payload_com_frame: str | None = None,
     subtract_known_payload_gravity: bool = False,
+    robust_identification: bool = DEFAULT_ROBUST_IDENTIFICATION,
 ):
     """
     执行整条动力学参数辨识流水线。
@@ -1346,6 +1370,8 @@ def run_pipeline(
         payload COM 所在坐标系名称。
     subtract_known_payload_gravity : bool
         若为 True，则在辨识本体参数前先扣除已知 payload 重力项。
+    robust_identification : bool
+        若为 True，则在 processed dataframe 中追加 no-time 鲁棒辨识辅助列。
 
     Returns
     -------
@@ -1402,6 +1428,7 @@ def run_pipeline(
     print(f"Gravity vector: {effective_gravity}")
     print(f"Solver method: {solver_method}")
     print(f"Payload mode: {effective_payload_mode.value}")
+    print(f"Robust identification: {robust_identification}")
     if payload_mass > 0.0:
         print(f"Payload mass: {payload_mass} kg")
         print(f"Payload COM: {payload_com}")
@@ -1478,9 +1505,15 @@ def run_pipeline(
             sampling_freq,
             cutoff_hz,
             real_torque_source,
+            robust_identification=robust_identification,
         )
     else:
-        df_processed = _prepare_synthetic_dataset(robot_model, sampling_freq, cutoff_hz)
+        df_processed = _prepare_synthetic_dataset(
+            robot_model,
+            sampling_freq,
+            cutoff_hz,
+            robust_identification=robust_identification,
+        )
 
     payload_model = _build_payload_model(
         robot_model=robot_model,
@@ -1646,6 +1679,11 @@ def parse_args():
         action='store_true',
         help="若提供已知 payload，则在本体辨识前先扣除其重力项。",
     )
+    parser.add_argument(
+        '--robust-identification',
+        action='store_true',
+        help="在 processed dataframe 中追加 no-time 鲁棒辨识辅助列，默认关闭以保持旧流程完全兼容。",
+    )
     return parser.parse_args()
 
 
@@ -1674,6 +1712,7 @@ if __name__ == "__main__":
             payload_reference_link=args.payload_reference_link,
             payload_com_frame=args.payload_com_frame,
             subtract_known_payload_gravity=args.subtract_known_payload_gravity,
+            robust_identification=args.robust_identification,
         )
     except Exception as exc:
         # 出错时打印完整堆栈，方便定位是哪一步、哪一行失败。

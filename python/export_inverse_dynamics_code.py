@@ -131,11 +131,40 @@ def _write_project_header(
                 "\t\tEcRealVector& tau",
                 "\t);",
                 "",
+                "\tvoid setUseExternalRuntimeParms",
+                "\t(",
+                "\t\tconst EcBoolean useExternalParms",
+                "\t);",
+                "",
+                "\tvoid setUseInternalPayloadRuntimeParms",
+                "\t(",
+                "\t\tconst EcBoolean useInternalPayloadParms",
+                "\t);",
+                "",
+                "\tvoid setPayloadRuntimeMassAndCom",
+                "\t(",
+                "\t\tconst EcReal mass,",
+                "\t\tconst EcRealVector& com",
+                "\t);",
+                "",
+                "\tvoid clearPayloadRuntimeOverride",
+                "\t(",
+                "\t);",
+                "",
                 "\tvoid computeRigidTorque",
                 "\t(",
                 "\t\tconst EcRealVector& q,",
                 "\t\tconst EcRealVector& dq,",
                 "\t\tconst EcRealVector& ddq,",
+                "\t\tEcRealVector& tau",
+                "\t) const;",
+                "",
+                "\tvoid computeRigidTorque",
+                "\t(",
+                "\t\tconst EcRealVector& q,",
+                "\t\tconst EcRealVector& dq,",
+                "\t\tconst EcRealVector& ddq,",
+                "\t\tconst EcRealVector& parms,",
                 "\t\tEcRealVector& tau",
                 "\t) const;",
                 "",
@@ -146,6 +175,14 @@ def _write_project_header(
                 "\t\tEcRealVector& tau",
                 "\t) const;",
                 "",
+                "\tvoid computeMassTorque",
+                "\t(",
+                "\t\tconst EcRealVector& q,",
+                "\t\tconst EcRealVector& ddq,",
+                "\t\tconst EcRealVector& parms,",
+                "\t\tEcRealVector& tau",
+                "\t) const;",
+                "",
                 "\tvoid computeCoriolisTorque",
                 "\t(",
                 "\t\tconst EcRealVector& q,",
@@ -153,9 +190,26 @@ def _write_project_header(
                 "\t\tEcRealVector& tau",
                 "\t) const;",
                 "",
+                "\tvoid computeCoriolisTorque",
+                "\t(",
+                "\t\tconst EcRealVector& q,",
+                "\t\tconst EcRealVector& dq,",
+                "\t\tconst EcRealVector& parms,",
+                "\t\tEcRealVector& tau",
+                "\t) const;",
+                "",
                 "\tvoid computeGravityAxisTorques",
                 "\t(",
                 "\t\tconst EcRealVector& q,",
+                "\t\tEcRealVector& tauGxUnit,",
+                "\t\tEcRealVector& tauGyUnit,",
+                "\t\tEcRealVector& tauGzUnit",
+                "\t) const;",
+                "",
+                "\tvoid computeGravityAxisTorques",
+                "\t(",
+                "\t\tconst EcRealVector& q,",
+                "\t\tconst EcRealVector& parms,",
                 "\t\tEcRealVector& tauGxUnit,",
                 "\t\tEcRealVector& tauGyUnit,",
                 "\t\tEcRealVector& tauGzUnit",
@@ -169,11 +223,29 @@ def _write_project_header(
                 "\t\tEcRealVector& tau",
                 "\t) const;",
                 "",
+                "\tvoid computeFrictionTorque",
+                "\t(",
+                "\t\tconst EcRealVector& q,",
+                "\t\tconst EcRealVector& dq,",
+                "\t\tconst EcRealVector& ddq,",
+                "\t\tconst EcRealVector& parms,",
+                "\t\tEcRealVector& tau",
+                "\t) const;",
+                "",
                 "\tvoid computeInverseDynamics",
                 "\t(",
                 "\t\tconst EcRealVector& q,",
                 "\t\tconst EcRealVector& dq,",
                 "\t\tconst EcRealVector& ddq,",
+                "\t\tEcRealVector& tau",
+                "\t) const;",
+                "",
+                "\tvoid computeInverseDynamics",
+                "\t(",
+                "\t\tconst EcRealVector& q,",
+                "\t\tconst EcRealVector& dq,",
+                "\t\tconst EcRealVector& ddq,",
+                "\t\tconst EcRealVector& parms,",
                 "\t\tEcRealVector& tau",
                 "\t) const;",
                 "",
@@ -188,11 +260,37 @@ def _write_project_header(
                 "",
                 "private:",
                 f"\tstatic const EcSizeT kNumJoints = {num_joints};",
+                "\tstatic const EcSizeT kRigidParamsPerJoint = 10;",
+                "\tstatic const EcSizeT kRuntimeParamsPerJoint = 13;",
                 "\tEcSizeT m_NumJoints;",
                 "\tEcReal m_gx;",
                 "\tEcReal m_gy;",
                 "\tEcReal m_gz;",
+                "\tEcBoolean m_useExternalRuntimeParms;",
+                "\tEcBoolean m_useInternalPayloadRuntimeParms;",
+                "\tEcBoolean m_hasInternalPayloadOverride;",
+                "\tEcReal m_payloadMass;",
+                "\tEcRealVector m_payloadCom;",
+                "\tEcRealVector m_internalPayloadParms;",
                 "\tEcRealVector m_zeros;",
+                "\tEcRealVector m_defaultParms;",
+                "",
+                "\tbool hasValidRuntimeParms(const EcRealVector& parms) const;",
+                "\tbool hasValidPayloadCom(const EcRealVector& com) const;",
+                "\tbool shouldUseRuntimeParms(const EcRealVector& parms) const;",
+                "\tvoid rebuildInternalPayloadRuntimeParms();",
+                "\tconst EcRealVector& activeRuntimeParms(const EcRealVector& parms) const;",
+                "\tvoid computeTorqueFromRegressor",
+                "\t(",
+                "\t\tconst double* regressor,",
+                "\t\tconst EcRealVector& q,",
+                "\t\tconst EcRealVector& dq,",
+                "\t\tconst EcRealVector& ddq,",
+                "\t\tconst EcRealVector& parms,",
+                "\t\tEcBoolean includeMotorInertia,",
+                "\t\tEcBoolean includeFriction,",
+                "\t\tEcRealVector& tau",
+                "\t) const;",
                 "};",
                 "",
             ]
@@ -206,10 +304,12 @@ def _write_project_cpp(
     class_name: str,
     num_joints: int,
     gravity_vector: np.ndarray,
+    default_runtime_parms: np.ndarray,
     generated_core_code: str,
     generation_metadata: dict[str, Any] | None = None,
 ) -> None:
     header_name = cpp_path.with_suffix(".h").name
+    default_runtime_parms_literal = _format_c_array(default_runtime_parms, indent="\t")
 
     cpp_path.write_text(
         "\n".join(
@@ -220,6 +320,11 @@ def _write_project_cpp(
                 *_metadata_comment_lines(generation_metadata),
                 "",
                 f'#include "{header_name}"',
+                "",
+                "namespace",
+                "{",
+                f"const EcReal kDefaultRuntimeParms[{num_joints * 13}] = {default_runtime_parms_literal};",
+                "}  // namespace",
                 "",
                 "// -----------------------------------------------------------------------------",
                 "// Generated inverse-dynamics core",
@@ -235,7 +340,14 @@ def _write_project_cpp(
                 f"\tm_gx = {float(gravity_vector[0]):.17g};",
                 f"\tm_gy = {float(gravity_vector[1]):.17g};",
                 f"\tm_gz = {float(gravity_vector[2]):.17g};",
+                "\tm_useExternalRuntimeParms = false;",
+                "\tm_useInternalPayloadRuntimeParms = false;",
+                "\tm_hasInternalPayloadOverride = false;",
+                "\tm_payloadMass = 0.0;",
+                "\tm_payloadCom.assign(3, 0.0);",
                 "\tm_zeros.assign(m_NumJoints, 0.0);",
+                "\tm_defaultParms.assign(kDefaultRuntimeParms, kDefaultRuntimeParms + kNumJoints * kRuntimeParamsPerJoint);",
+                "\tm_internalPayloadParms = m_defaultParms;",
                 "}",
                 "",
                 f"{class_name}::~{class_name}()",
@@ -262,6 +374,168 @@ def _write_project_cpp(
                 "\tm_gz = gz;",
                 "}",
                 "",
+                f"void {class_name}::setUseExternalRuntimeParms",
+                "(",
+                "\tconst EcBoolean useExternalParms",
+                ")",
+                "{",
+                "\tm_useExternalRuntimeParms = useExternalParms;",
+                "}",
+                "",
+                f"void {class_name}::setUseInternalPayloadRuntimeParms",
+                "(",
+                "\tconst EcBoolean useInternalPayloadParms",
+                ")",
+                "{",
+                "\tm_useInternalPayloadRuntimeParms = useInternalPayloadParms;",
+                "}",
+                "",
+                f"void {class_name}::setPayloadRuntimeMassAndCom",
+                "(",
+                "\tconst EcReal mass,",
+                "\tconst EcRealVector& com",
+                ")",
+                "{",
+                "\tm_payloadMass = mass;",
+                "\tm_payloadCom = com;",
+                "\trebuildInternalPayloadRuntimeParms();",
+                "}",
+                "",
+                f"void {class_name}::clearPayloadRuntimeOverride",
+                "(",
+                ")",
+                "{",
+                "\tm_payloadMass = 0.0;",
+                "\tm_payloadCom.assign(3, 0.0);",
+                "\tm_hasInternalPayloadOverride = false;",
+                "\tm_internalPayloadParms = m_defaultParms;",
+                "}",
+                "",
+                f"bool {class_name}::hasValidRuntimeParms",
+                "(",
+                "\tconst EcRealVector& parms",
+                ") const",
+                "{",
+                "\treturn parms.empty() || parms.size() == kNumJoints * kRuntimeParamsPerJoint;",
+                "}",
+                "",
+                f"bool {class_name}::hasValidPayloadCom",
+                "(",
+                "\tconst EcRealVector& com",
+                ") const",
+                "{",
+                "\treturn com.size() == 3;",
+                "}",
+                "",
+                f"bool {class_name}::shouldUseRuntimeParms",
+                "(",
+                "\tconst EcRealVector& parms",
+                ") const",
+                "{",
+                "\tif (!parms.empty() && m_useExternalRuntimeParms)",
+                "\t{",
+                "\t\treturn true;",
+                "\t}",
+                "\treturn m_useInternalPayloadRuntimeParms && m_hasInternalPayloadOverride;",
+                "}",
+                "",
+                f"void {class_name}::rebuildInternalPayloadRuntimeParms",
+                "(",
+                ")",
+                "{",
+                "\tm_internalPayloadParms = m_defaultParms;",
+                "\tm_hasInternalPayloadOverride = false;",
+                "\tif (m_payloadMass <= 0.0 || !hasValidPayloadCom(m_payloadCom))",
+                "\t{",
+                "\t\treturn;",
+                "\t}",
+                "\tconst EcSizeT lastJointOffset = (kNumJoints - 1) * kRuntimeParamsPerJoint;",
+                "\tconst EcReal x = m_payloadCom[0];",
+                "\tconst EcReal y = m_payloadCom[1];",
+                "\tconst EcReal z = m_payloadCom[2];",
+                "\tm_internalPayloadParms[lastJointOffset + 0] += m_payloadMass * (y * y + z * z);",
+                "\tm_internalPayloadParms[lastJointOffset + 1] += -m_payloadMass * x * y;",
+                "\tm_internalPayloadParms[lastJointOffset + 2] += -m_payloadMass * x * z;",
+                "\tm_internalPayloadParms[lastJointOffset + 3] += m_payloadMass * (x * x + z * z);",
+                "\tm_internalPayloadParms[lastJointOffset + 4] += -m_payloadMass * y * z;",
+                "\tm_internalPayloadParms[lastJointOffset + 5] += m_payloadMass * (x * x + y * y);",
+                "\tm_internalPayloadParms[lastJointOffset + 6] += m_payloadMass * x;",
+                "\tm_internalPayloadParms[lastJointOffset + 7] += m_payloadMass * y;",
+                "\tm_internalPayloadParms[lastJointOffset + 8] += m_payloadMass * z;",
+                "\tm_internalPayloadParms[lastJointOffset + 9] += m_payloadMass;",
+                "\tm_hasInternalPayloadOverride = true;",
+                "}",
+                "",
+                f"const EcRealVector& {class_name}::activeRuntimeParms",
+                "(",
+                "\tconst EcRealVector& parms",
+                ") const",
+                "{",
+                "\tif (!parms.empty() && m_useExternalRuntimeParms)",
+                "\t{",
+                "\t\treturn parms;",
+                "\t}",
+                "\tif (m_useInternalPayloadRuntimeParms && m_hasInternalPayloadOverride)",
+                "\t{",
+                "\t\treturn m_internalPayloadParms;",
+                "\t}",
+                "\treturn m_defaultParms;",
+                "}",
+                "",
+                f"void {class_name}::computeTorqueFromRegressor",
+                "(",
+                "\tconst double* regressor,",
+                "\tconst EcRealVector& q,",
+                "\tconst EcRealVector& dq,",
+                "\tconst EcRealVector& ddq,",
+                "\tconst EcRealVector& parms,",
+                "\tEcBoolean includeMotorInertia,",
+                "\tEcBoolean includeFriction,",
+                "\tEcRealVector& tau",
+                ") const",
+                "{",
+                "\t(void)q;",
+                "\tconst EcRealVector& activeParms = activeRuntimeParms(parms);",
+                "\tdouble thetaRigid[kNumJoints * kRigidParamsPerJoint];",
+                "\tfor (EcSizeT jointIdx = 0; jointIdx < kNumJoints; ++jointIdx)",
+                "\t{",
+                "\t\tconst EcSizeT runtimeOffset = jointIdx * kRuntimeParamsPerJoint;",
+                "\t\tconst EcSizeT rigidOffset = jointIdx * kRigidParamsPerJoint;",
+                "\t\tthetaRigid[rigidOffset + 0] = activeParms[runtimeOffset + 9];",
+                "\t\tthetaRigid[rigidOffset + 1] = activeParms[runtimeOffset + 6];",
+                "\t\tthetaRigid[rigidOffset + 2] = activeParms[runtimeOffset + 7];",
+                "\t\tthetaRigid[rigidOffset + 3] = activeParms[runtimeOffset + 8];",
+                "\t\tthetaRigid[rigidOffset + 4] = activeParms[runtimeOffset + 0];",
+                "\t\tthetaRigid[rigidOffset + 5] = activeParms[runtimeOffset + 1];",
+                "\t\tthetaRigid[rigidOffset + 6] = activeParms[runtimeOffset + 2];",
+                "\t\tthetaRigid[rigidOffset + 7] = activeParms[runtimeOffset + 3];",
+                "\t\tthetaRigid[rigidOffset + 8] = activeParms[runtimeOffset + 4];",
+                "\t\tthetaRigid[rigidOffset + 9] = activeParms[runtimeOffset + 5];",
+                "\t}",
+                "\tif (tau.size() != m_NumJoints)",
+                "\t{",
+                "\t\ttau.assign(m_NumJoints, 0.0);",
+                "\t}",
+                "\tfor (EcSizeT rowIdx = 0; rowIdx < kNumJoints; ++rowIdx)",
+                "\t{",
+                "\t\tdouble value = 0.0;",
+                "\t\tfor (EcSizeT colIdx = 0; colIdx < kNumJoints * kRigidParamsPerJoint; ++colIdx)",
+                "\t\t{",
+                "\t\t\tvalue += regressor[rowIdx * kNumJoints * kRigidParamsPerJoint + colIdx] * thetaRigid[colIdx];",
+                "\t\t}",
+                "\t\tif (includeMotorInertia)",
+                "\t\t{",
+                "\t\t\tvalue += activeParms[rowIdx * kRuntimeParamsPerJoint + 10] * ddq[rowIdx];",
+                "\t\t}",
+                "\t\tif (includeFriction)",
+                "\t\t{",
+                "\t\t\tvalue += activeParms[rowIdx * kRuntimeParamsPerJoint + 11] * dq[rowIdx];",
+                "\t\t\tvalue += activeParms[rowIdx * kRuntimeParamsPerJoint + 12] * signWithZero(dq[rowIdx]);",
+                "\t\t}",
+                "\t\ttau[rowIdx] = value;",
+                "\t}",
+                "}",
+                "",
                 f"void {class_name}::calculateGravityJointTorques",
                 "(",
                 "\tconst EcRealVector& q,",
@@ -269,17 +543,18 @@ def _write_project_cpp(
                 "\tEcRealVector& tau",
                 ")",
                 "{",
-                "\t(void)parms;",
                 "\tif (q.size() != m_NumJoints)",
                 "\t{",
                 "\t\treturn;",
                 "\t}",
-                "\tif (tau.size() != m_NumJoints)",
+                "\tif (!parms.empty() && m_useExternalRuntimeParms && !hasValidRuntimeParms(parms))",
                 "\t{",
-                "\t\ttau.assign(m_NumJoints, 0.0);",
+                "\t\treturn;",
                 "\t}",
                 "\tconst double gravity[3] = {m_gx, m_gy, m_gz};",
-                "\tcalculateIdentifiedGravityTorqueCore(q.data(), gravity, tau.data());",
+                "\tdouble regressor[kNumJoints * kNumJoints * kRigidParamsPerJoint];",
+                "\tcalculateIdentifiedGravityRegressorRowMajorCore(q.data(), gravity, regressor);",
+                "\tcomputeTorqueFromRegressor(regressor, q, m_zeros, m_zeros, parms, false, false, tau);",
                 "}",
                 "",
                 f"void {class_name}::computeRigidTorque",
@@ -290,16 +565,39 @@ def _write_project_cpp(
                 "\tEcRealVector& tau",
                 ") const",
                 "{",
+                "\tcomputeRigidTorque(q, dq, ddq, EcRealVector(), tau);",
+                "}",
+                "",
+                f"void {class_name}::computeRigidTorque",
+                "(",
+                "\tconst EcRealVector& q,",
+                "\tconst EcRealVector& dq,",
+                "\tconst EcRealVector& ddq,",
+                "\tconst EcRealVector& parms,",
+                "\tEcRealVector& tau",
+                ") const",
+                "{",
                 "\tif (q.size() != m_NumJoints || dq.size() != m_NumJoints || ddq.size() != m_NumJoints)",
                 "\t{",
                 "\t\treturn;",
                 "\t}",
+                "\tEcRealVector tauM(m_NumJoints, 0.0);",
+                "\tEcRealVector tauC(m_NumJoints, 0.0);",
+                "\tEcRealVector tauG(m_NumJoints, 0.0);",
+                "\tcomputeMassTorque(q, ddq, parms, tauM);",
+                "\tcomputeCoriolisTorque(q, dq, parms, tauC);",
+                "\tconst double gravity[3] = {m_gx, m_gy, m_gz};",
+                "\tdouble regressor[kNumJoints * kNumJoints * kRigidParamsPerJoint];",
+                "\tcalculateIdentifiedGravityRegressorRowMajorCore(q.data(), gravity, regressor);",
+                "\tcomputeTorqueFromRegressor(regressor, q, m_zeros, m_zeros, parms, false, false, tauG);",
                 "\tif (tau.size() != m_NumJoints)",
                 "\t{",
                 "\t\ttau.assign(m_NumJoints, 0.0);",
                 "\t}",
-                "\tconst double gravity[3] = {m_gx, m_gy, m_gz};",
-                "\tcalculateIdentifiedRigidDynamicsCore(q.data(), dq.data(), ddq.data(), gravity, tau.data());",
+                "\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)",
+                "\t{",
+                "\t\ttau[idx] = tauM[idx] + tauC[idx] + tauG[idx];",
+                "\t}",
                 "}",
                 "",
                 f"void {class_name}::computeMassTorque",
@@ -309,15 +607,28 @@ def _write_project_cpp(
                 "\tEcRealVector& tau",
                 ") const",
                 "{",
+                "\tcomputeMassTorque(q, ddq, EcRealVector(), tau);",
+                "}",
+                "",
+                f"void {class_name}::computeMassTorque",
+                "(",
+                "\tconst EcRealVector& q,",
+                "\tconst EcRealVector& ddq,",
+                "\tconst EcRealVector& parms,",
+                "\tEcRealVector& tau",
+                ") const",
+                "{",
                 "\tif (q.size() != m_NumJoints || ddq.size() != m_NumJoints)",
                 "\t{",
                 "\t\treturn;",
                 "\t}",
-                "\tif (tau.size() != m_NumJoints)",
+                "\tif (!parms.empty() && m_useExternalRuntimeParms && !hasValidRuntimeParms(parms))",
                 "\t{",
-                "\t\ttau.assign(m_NumJoints, 0.0);",
+                "\t\treturn;",
                 "\t}",
-                "\tcalculateIdentifiedMassTorqueCore(q.data(), ddq.data(), tau.data());",
+                "\tdouble regressor[kNumJoints * kNumJoints * kRigidParamsPerJoint];",
+                "\tcalculateIdentifiedZeroGravityRigidRegressorRowMajorCore(q.data(), m_zeros.data(), ddq.data(), regressor);",
+                "\tcomputeTorqueFromRegressor(regressor, q, m_zeros, ddq, parms, false, false, tau);",
                 "}",
                 "",
                 f"void {class_name}::computeCoriolisTorque",
@@ -327,20 +638,45 @@ def _write_project_cpp(
                 "\tEcRealVector& tau",
                 ") const",
                 "{",
+                "\tcomputeCoriolisTorque(q, dq, EcRealVector(), tau);",
+                "}",
+                "",
+                f"void {class_name}::computeCoriolisTorque",
+                "(",
+                "\tconst EcRealVector& q,",
+                "\tconst EcRealVector& dq,",
+                "\tconst EcRealVector& parms,",
+                "\tEcRealVector& tau",
+                ") const",
+                "{",
                 "\tif (q.size() != m_NumJoints || dq.size() != m_NumJoints)",
                 "\t{",
                 "\t\treturn;",
                 "\t}",
-                "\tif (tau.size() != m_NumJoints)",
+                "\tif (!parms.empty() && m_useExternalRuntimeParms && !hasValidRuntimeParms(parms))",
                 "\t{",
-                "\t\ttau.assign(m_NumJoints, 0.0);",
+                "\t\treturn;",
                 "\t}",
-                "\tcalculateIdentifiedCoriolisTorqueCore(q.data(), dq.data(), tau.data());",
+                "\tdouble regressor[kNumJoints * kNumJoints * kRigidParamsPerJoint];",
+                "\tcalculateIdentifiedZeroGravityRigidRegressorRowMajorCore(q.data(), dq.data(), m_zeros.data(), regressor);",
+                "\tcomputeTorqueFromRegressor(regressor, q, dq, m_zeros, parms, false, false, tau);",
                 "}",
                 "",
                 f"void {class_name}::computeGravityAxisTorques",
                 "(",
                 "\tconst EcRealVector& q,",
+                "\tEcRealVector& tauGxUnit,",
+                "\tEcRealVector& tauGyUnit,",
+                "\tEcRealVector& tauGzUnit",
+                ") const",
+                "{",
+                "\tcomputeGravityAxisTorques(q, EcRealVector(), tauGxUnit, tauGyUnit, tauGzUnit);",
+                "}",
+                "",
+                f"void {class_name}::computeGravityAxisTorques",
+                "(",
+                "\tconst EcRealVector& q,",
+                "\tconst EcRealVector& parms,",
                 "\tEcRealVector& tauGxUnit,",
                 "\tEcRealVector& tauGyUnit,",
                 "\tEcRealVector& tauGzUnit",
@@ -362,9 +698,20 @@ def _write_project_cpp(
                 "\t{",
                 "\t\ttauGzUnit.assign(m_NumJoints, 0.0);",
                 "\t}",
-                "\tcalculateIdentifiedGravityXAxisTorqueCore(q.data(), tauGxUnit.data());",
-                "\tcalculateIdentifiedGravityYAxisTorqueCore(q.data(), tauGyUnit.data());",
-                "\tcalculateIdentifiedGravityZAxisTorqueCore(q.data(), tauGzUnit.data());",
+                "\tif (!parms.empty() && m_useExternalRuntimeParms && !hasValidRuntimeParms(parms))",
+                "\t{",
+                "\t\treturn;",
+                "\t}",
+                "\tconst EcReal gxUnit[3] = {1.0, 0.0, 0.0};",
+                "\tconst EcReal gyUnit[3] = {0.0, 1.0, 0.0};",
+                "\tconst EcReal gzUnit[3] = {0.0, 0.0, 1.0};",
+                "\tdouble regressor[kNumJoints * kNumJoints * kRigidParamsPerJoint];",
+                "\tcalculateIdentifiedGravityRegressorRowMajorCore(q.data(), gxUnit, regressor);",
+                "\tcomputeTorqueFromRegressor(regressor, q, m_zeros, m_zeros, parms, false, false, tauGxUnit);",
+                "\tcalculateIdentifiedGravityRegressorRowMajorCore(q.data(), gyUnit, regressor);",
+                "\tcomputeTorqueFromRegressor(regressor, q, m_zeros, m_zeros, parms, false, false, tauGyUnit);",
+                "\tcalculateIdentifiedGravityRegressorRowMajorCore(q.data(), gzUnit, regressor);",
+                "\tcomputeTorqueFromRegressor(regressor, q, m_zeros, m_zeros, parms, false, false, tauGzUnit);",
                 "}",
                 "",
                 f"void {class_name}::computeFrictionTorque",
@@ -375,21 +722,37 @@ def _write_project_cpp(
                 "\tEcRealVector& tau",
                 ") const",
                 "{",
+                "\tcomputeFrictionTorque(q, dq, ddq, EcRealVector(), tau);",
+                "}",
+                "",
+                f"void {class_name}::computeFrictionTorque",
+                "(",
+                "\tconst EcRealVector& q,",
+                "\tconst EcRealVector& dq,",
+                "\tconst EcRealVector& ddq,",
+                "\tconst EcRealVector& parms,",
+                "\tEcRealVector& tau",
+                ") const",
+                "{",
                 "\tif (q.size() != m_NumJoints || dq.size() != m_NumJoints || ddq.size() != m_NumJoints)",
                 "\t{",
                 "\t\treturn;",
                 "\t}",
-                "\tEcRealVector total(m_NumJoints, 0.0);",
-                "\tEcRealVector rigid(m_NumJoints, 0.0);",
-                "\tcomputeInverseDynamics(q, dq, ddq, total);",
-                "\tcomputeRigidTorque(q, dq, ddq, rigid);",
+                "\tif (!parms.empty() && m_useExternalRuntimeParms && !hasValidRuntimeParms(parms))",
+                "\t{",
+                "\t\treturn;",
+                "\t}",
                 "\tif (tau.size() != m_NumJoints)",
                 "\t{",
                 "\t\ttau.assign(m_NumJoints, 0.0);",
                 "\t}",
+                "\tconst EcRealVector& activeParms = activeRuntimeParms(parms);",
                 "\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)",
                 "\t{",
-                "\t\ttau[idx] = total[idx] - rigid[idx];",
+                "\t\tconst EcSizeT runtimeOffset = idx * kRuntimeParamsPerJoint;",
+                "\t\ttau[idx] = activeParms[runtimeOffset + 10] * ddq[idx]",
+                "\t\t\t+ activeParms[runtimeOffset + 11] * dq[idx]",
+                "\t\t\t+ activeParms[runtimeOffset + 12] * signWithZero(dq[idx]);",
                 "\t}",
                 "}",
                 "",
@@ -401,16 +764,34 @@ def _write_project_cpp(
                 "\tEcRealVector& tau",
                 ") const",
                 "{",
+                "\tcomputeInverseDynamics(q, dq, ddq, EcRealVector(), tau);",
+                "}",
+                "",
+                f"void {class_name}::computeInverseDynamics",
+                "(",
+                "\tconst EcRealVector& q,",
+                "\tconst EcRealVector& dq,",
+                "\tconst EcRealVector& ddq,",
+                "\tconst EcRealVector& parms,",
+                "\tEcRealVector& tau",
+                ") const",
+                "{",
                 "\tif (q.size() != m_NumJoints || dq.size() != m_NumJoints || ddq.size() != m_NumJoints)",
                 "\t{",
                 "\t\treturn;",
                 "\t}",
+                "\tEcRealVector tauRigid(m_NumJoints, 0.0);",
+                "\tEcRealVector tauFriction(m_NumJoints, 0.0);",
+                "\tcomputeRigidTorque(q, dq, ddq, parms, tauRigid);",
+                "\tcomputeFrictionTorque(q, dq, ddq, parms, tauFriction);",
                 "\tif (tau.size() != m_NumJoints)",
                 "\t{",
                 "\t\ttau.assign(m_NumJoints, 0.0);",
                 "\t}",
-                "\tconst double gravity[3] = {m_gx, m_gy, m_gz};",
-                "\tcalculateIdentifiedInverseDynamicsCore(q.data(), dq.data(), ddq.data(), gravity, tau.data());",
+                "\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)",
+                "\t{",
+                "\t\ttau[idx] = tauRigid[idx] + tauFriction[idx];",
+                "\t}",
                 "}",
                 "",
                 f"EcBoolean {class_name}::calculateEstimateJointToqrues",
@@ -422,12 +803,30 @@ def _write_project_cpp(
                 "\tEcRealVector& tau",
                 ")",
                 "{",
-                "\t(void)parms;  // Identified parameters are baked into the generated formula.",
                 "\tif (q.size() != m_NumJoints || dq.size() != m_NumJoints || ddq.size() != m_NumJoints)",
                 "\t{",
                 "\t\treturn false;",
                 "\t}",
-                "\tcomputeInverseDynamics(q, dq, ddq, tau);",
+                "\tif (!parms.empty() && m_useExternalRuntimeParms && !hasValidRuntimeParms(parms))",
+                "\t{",
+                "\t\treturn false;",
+                "\t}",
+                "\tEcRealVector tauM(m_NumJoints, 0.0);",
+                "\tEcRealVector tauC(m_NumJoints, 0.0);",
+                "\tEcRealVector tauG(m_NumJoints, 0.0);",
+                "\tEcRealVector tauF(m_NumJoints, 0.0);",
+                "\tcomputeMassTorque(q, ddq, parms, tauM);",
+                "\tcomputeCoriolisTorque(q, dq, parms, tauC);",
+                "\tcalculateGravityJointTorques(q, parms, tauG);",
+                "\tcomputeFrictionTorque(q, dq, ddq, parms, tauF);",
+                "\tif (tau.size() != m_NumJoints)",
+                "\t{",
+                "\t\ttau.assign(m_NumJoints, 0.0);",
+                "\t}",
+                "\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)",
+                "\t{",
+                "\t\ttau[idx] = tauM[idx] + tauC[idx] + tauG[idx] + tauF[idx];",
+                "\t}",
                 "\treturn true;",
                 "}",
                 "",
@@ -440,17 +839,26 @@ def _write_project_cpp(
                 "\tEcRealVector& tau",
                 ")",
                 "{",
-                "\t(void)parms;",
                 "\tif (q.size() != m_NumJoints || dq.size() != m_NumJoints || ddq.size() != m_NumJoints)",
                 "\t{",
                 "\t\treturn;",
                 "\t}",
+                "\tif (!parms.empty() && m_useExternalRuntimeParms && !hasValidRuntimeParms(parms))",
+                "\t{",
+                "\t\treturn;",
+                "\t}",
+                "\tEcRealVector tauM(m_NumJoints, 0.0);",
+                "\tEcRealVector tauC(m_NumJoints, 0.0);",
+                "\tcomputeMassTorque(q, ddq, parms, tauM);",
+                "\tcomputeCoriolisTorque(q, dq, parms, tauC);",
                 "\tif (tau.size() != m_NumJoints)",
                 "\t{",
                 "\t\ttau.assign(m_NumJoints, 0.0);",
                 "\t}",
-                "",
-                "\tcalculateIdentifiedZeroGravityRigidTorqueCore(q.data(), dq.data(), ddq.data(), tau.data());",
+                "\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)",
+                "\t{",
+                "\t\ttau[idx] = tauM[idx] + tauC[idx];",
+                "\t}",
                 "}",
                 "",
             ]
@@ -459,11 +867,842 @@ def _write_project_cpp(
     )
 
 
+def _inject_runtime_robust_header(header_path: Path, class_name: str) -> None:
+    source = header_path.read_text(encoding="utf-8")
+    prelude = """
+enum RuntimeTorqueMode
+{
+\tLEGACY_RAW = 0,
+\tROBUST_NO_TIME = 1,
+\tROBUST_TIMED_RESERVED = 2
+};
+
+enum MotionState
+{
+\tSTATIC = 0,
+\tMOVING_POSITIVE = 1,
+\tMOVING_NEGATIVE = 2,
+\tTRANSITION = 3
+};
+
+struct RuntimeNoTimeConfig
+{
+\tEcBoolean enableInputValidation = true;
+\tEcBoolean enableSampleSmoothing = false;
+\tEcBoolean enableDdqClamp = false;
+\tEcBoolean enableFrictionStateMachine = false;
+\tEcBoolean enableHoldMode = false;
+\tEcBoolean enableMCGate = false;
+};
+
+struct SampleSmoothingConfig
+{
+\tEcBoolean enabled = false;
+\tEcRealVector qAlpha;
+\tEcRealVector dqAlpha;
+\tEcRealVector ddqAlpha;
+};
+
+struct RuntimeValidationConfig
+{
+\tEcBoolean enableFiniteCheck = true;
+\tEcBoolean enableRadianRangeCheck = true;
+\tEcBoolean enableGravityNormCheck = true;
+\tEcReal maxAbsQForRadianCheck = 6.2831853071795862;
+\tEcReal gravityNormExpected = 9.81;
+\tEcReal gravityNormTolerance = 1.5;
+};
+
+struct DdqClampConfig
+{
+\tEcBoolean enabled = false;
+\tEcRealVector ddqLimit;
+};
+
+struct FrictionStateConfig
+{
+\tEcBoolean enabled = false;
+\tEcRealVector vOff;
+\tEcRealVector vOn;
+\tEcRealVector aOff;
+\tEcBoolean enableHysteresis = true;
+\tEcBoolean enableSmoothSign = false;
+\tEcRealVector smoothVelocity;
+\tEcBoolean enableHoldMode = false;
+\tEcRealVector holdBias;
+};
+
+struct MCGateConfig
+{
+\tEcBoolean enabled = false;
+\tEcReal staticWM = 0.0;
+\tEcReal staticWC = 0.0;
+\tEcReal transitionWM = 0.0;
+\tEcReal transitionWC = 0.0;
+\tEcReal dynamicWM = 1.0;
+\tEcReal dynamicWC = 1.0;
+};
+
+struct RuntimeDiagnostics
+{
+\tEcRealVector q_raw;
+\tEcRealVector dq_raw;
+\tEcRealVector ddq_raw;
+\tEcRealVector q_used;
+\tEcRealVector dq_used;
+\tEcRealVector ddq_used;
+\tEcRealVector tau_M_raw;
+\tEcRealVector tau_C_raw;
+\tEcRealVector tau_G;
+\tEcRealVector tau_F_viscous;
+\tEcRealVector tau_F_coulomb;
+\tEcRealVector tau_F_hold;
+\tEcRealVector tau_F_total;
+\tEcRealVector tau_M_used;
+\tEcRealVector tau_C_used;
+\tEcRealVector tau_total;
+\tEcRealVector friction_sign;
+\tEcRealVector hold_indicator;
+\tEcRealVector motion_state;
+\tEcRealVector wM;
+\tEcRealVector wC;
+\tEcRealVector validation_status;
+};
+
+""".lstrip("\n")
+    public_methods = """
+\tvoid setRuntimeTorqueMode
+\t(
+\t\tconst EcInt32 mode
+\t);
+
+\tvoid setRuntimeNoTimeConfig
+\t(
+\t\tconst RuntimeNoTimeConfig& config
+\t);
+
+\tvoid setSampleSmoothingConfig
+\t(
+\t\tconst SampleSmoothingConfig& config
+\t);
+
+\tvoid setRuntimeValidationConfig
+\t(
+\t\tconst RuntimeValidationConfig& config
+\t);
+
+\tvoid setDdqClampConfig
+\t(
+\t\tconst DdqClampConfig& config
+\t);
+
+\tvoid setFrictionStateConfig
+\t(
+\t\tconst FrictionStateConfig& config
+\t);
+
+\tvoid setMCGateConfig
+\t(
+\t\tconst MCGateConfig& config
+\t);
+
+\tvoid resetRuntimeRobustState
+\t(
+\t);
+
+\tvoid getLastRuntimeDiagnostics
+\t(
+\t\tRuntimeDiagnostics& diagnostics
+\t) const;
+
+\tvoid getLastTorqueComponents
+\t(
+\t\tEcRealVector& tauM,
+\t\tEcRealVector& tauC,
+\t\tEcRealVector& tauG,
+\t\tEcRealVector& tauF,
+\t\tEcRealVector& tauTotal
+\t) const;
+
+\tvoid getLastRuntimeSignals
+\t(
+\t\tEcRealVector& qUsed,
+\t\tEcRealVector& dqUsed,
+\t\tEcRealVector& ddqUsed,
+\t\tEcRealVector& frictionSign,
+\t\tEcRealVector& motionState
+\t) const;
+
+""".lstrip("\n")
+    private_decls = """
+\tEcReal configValue
+\t(
+\t\tconst EcRealVector& values,
+\t\tconst EcSizeT index,
+\t\tconst EcReal defaultValue
+\t) const;
+\tvoid clearLastRuntimeDiagnostics(const EcBoolean validationOk);
+\tvoid updateMotionStateNoTime();
+\tEcBoolean validateRuntimeInputNoTime
+\t(
+\t\tconst EcRealVector& q,
+\t\tconst EcRealVector& dq,
+\t\tconst EcRealVector& ddq,
+\t\tconst EcRealVector& parms,
+\t\tEcRealVector& tau
+\t);
+\tEcBoolean calculateEstimateJointToqruesLegacyInternal
+\t(
+\t\tconst EcRealVector& q,
+\t\tconst EcRealVector& dq,
+\t\tconst EcRealVector& ddq,
+\t\tconst EcRealVector& parms,
+\t\tEcRealVector& tau
+\t);
+\tEcBoolean calculateEstimateJointToqruesRobustNoTimeInternal
+\t(
+\t\tconst EcRealVector& q,
+\t\tconst EcRealVector& dq,
+\t\tconst EcRealVector& ddq,
+\t\tconst EcRealVector& parms,
+\t\tEcRealVector& tau
+\t);
+\tvoid computeFrictionTorqueRobustNoTimeInternal
+\t(
+\t\tconst EcRealVector& parms,
+\t\tEcRealVector& tau
+\t);
+
+""".lstrip("\n")
+    member_block = """
+\tEcInt32 m_runtimeTorqueMode;
+\tRuntimeNoTimeConfig m_runtimeNoTimeConfig;
+\tSampleSmoothingConfig m_sampleSmoothingConfig;
+\tRuntimeValidationConfig m_runtimeValidationConfig;
+\tDdqClampConfig m_ddqClampConfig;
+\tFrictionStateConfig m_frictionStateConfig;
+\tMCGateConfig m_mcGateConfig;
+\tRuntimeDiagnostics m_lastDiagnostics;
+\tEcRealVector m_qUsed;
+\tEcRealVector m_dqUsed;
+\tEcRealVector m_ddqUsed;
+\tEcRealVector m_qPrev;
+\tEcRealVector m_dqPrev;
+\tEcRealVector m_ddqPrev;
+\tEcRealVector m_tauM;
+\tEcRealVector m_tauC;
+\tEcRealVector m_tauG;
+\tEcRealVector m_tauF;
+\tEcRealVector m_tauTotal;
+\tEcRealVector m_tauFViscous;
+\tEcRealVector m_tauFCoulomb;
+\tEcRealVector m_tauFHold;
+\tEcRealVector m_frictionSign;
+\tEcRealVector m_holdIndicator;
+\tEcRealVector m_motionState;
+\tEcRealVector m_validationStatus;
+\tEcBoolean m_hasRobustStateInitialized;
+
+""".lstrip("\n")
+
+    source = source.replace("using namespace KDL;\n\n", "using namespace KDL;\n\n" + prelude)
+    source = source.replace(
+        "\tvoid setUseExternalRuntimeParms\n",
+        public_methods + "\tvoid setUseExternalRuntimeParms\n",
+    )
+    source = source.replace(
+        "\tEcRealVector m_defaultParms;\n\n",
+        "\tEcRealVector m_defaultParms;\n"
+        + member_block
+        + "\n",
+    )
+    source = source.replace(
+        "\tconst EcRealVector& activeRuntimeParms(const EcRealVector& parms) const;\n",
+        "\tconst EcRealVector& activeRuntimeParms(const EcRealVector& parms) const;\n"
+        + private_decls,
+    )
+    header_path.write_text(source, encoding="utf-8")
+
+
+def _inject_runtime_robust_cpp(cpp_path: Path, class_name: str) -> None:
+    source = cpp_path.read_text(encoding="utf-8")
+    ctor_old = (
+        f"{class_name}::{class_name}()\n"
+        "{\n"
+        "\tm_NumJoints = 7;\n"
+    )
+    source = source.replace(ctor_old, ctor_old)
+    source = source.replace(
+        "\tm_internalPayloadParms = m_defaultParms;\n}",
+        "\tm_internalPayloadParms = m_defaultParms;\n"
+        "\tm_runtimeTorqueMode = LEGACY_RAW;\n"
+        "\tm_sampleSmoothingConfig.qAlpha.assign(kNumJoints, 1.0);\n"
+        "\tm_sampleSmoothingConfig.dqAlpha.assign(kNumJoints, 1.0);\n"
+        "\tm_sampleSmoothingConfig.ddqAlpha.assign(kNumJoints, 1.0);\n"
+        "\tm_ddqClampConfig.ddqLimit.assign(kNumJoints, 50.0);\n"
+        "\tm_frictionStateConfig.vOff.assign(kNumJoints, 0.01);\n"
+        "\tm_frictionStateConfig.vOn.assign(kNumJoints, 0.03);\n"
+        "\tm_frictionStateConfig.aOff.assign(kNumJoints, 0.2);\n"
+        "\tm_frictionStateConfig.smoothVelocity.assign(kNumJoints, 0.02);\n"
+        "\tm_frictionStateConfig.holdBias.assign(kNumJoints, 0.0);\n"
+        "\tresetRuntimeRobustState();\n}",
+    )
+
+    legacy_impl = f"""EcBoolean {class_name}::calculateEstimateJointToqruesLegacyInternal
+(
+\tconst EcRealVector& q,
+\tconst EcRealVector& dq,
+\tconst EcRealVector& ddq,
+\tconst EcRealVector& parms,
+\tEcRealVector& tau
+)
+{{
+\tif (q.size() != m_NumJoints || dq.size() != m_NumJoints || ddq.size() != m_NumJoints)
+\t{{
+\t\treturn false;
+\t}}
+\tif (!parms.empty() && m_useExternalRuntimeParms && !hasValidRuntimeParms(parms))
+\t{{
+\t\treturn false;
+\t}}
+\tEcRealVector tauM(m_NumJoints, 0.0);
+\tEcRealVector tauC(m_NumJoints, 0.0);
+\tEcRealVector tauG(m_NumJoints, 0.0);
+\tEcRealVector tauF(m_NumJoints, 0.0);
+\tcomputeMassTorque(q, ddq, parms, tauM);
+\tcomputeCoriolisTorque(q, dq, parms, tauC);
+\tcalculateGravityJointTorques(q, parms, tauG);
+\tcomputeFrictionTorque(q, dq, ddq, parms, tauF);
+\tif (tau.size() != m_NumJoints)
+\t{{
+\t\ttau.assign(m_NumJoints, 0.0);
+\t}}
+\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)
+\t{{
+\t\ttau[idx] = tauM[idx] + tauC[idx] + tauG[idx] + tauF[idx];
+\t}}
+\treturn true;
+}}
+"""
+
+    dispatch_impl = f"""EcBoolean {class_name}::calculateEstimateJointToqrues
+(
+\tconst EcRealVector& q,
+\tconst EcRealVector& dq,
+\tconst EcRealVector& ddq,
+\tconst EcRealVector& parms,
+\tEcRealVector& tau
+)
+{{
+\tif (m_runtimeTorqueMode == ROBUST_NO_TIME)
+\t{{
+\t\treturn calculateEstimateJointToqruesRobustNoTimeInternal(q, dq, ddq, parms, tau);
+\t}}
+\tif (m_runtimeTorqueMode == ROBUST_TIMED_RESERVED)
+\t{{
+\t\t// Reserved for a future timestamp/dt-aware implementation without changing
+\t\t// the shared external virtual function signature.
+\t\treturn calculateEstimateJointToqruesLegacyInternal(q, dq, ddq, parms, tau);
+\t}}
+\treturn calculateEstimateJointToqruesLegacyInternal(q, dq, ddq, parms, tau);
+}}
+"""
+
+    old_dispatch = f"""EcBoolean {class_name}::calculateEstimateJointToqrues
+(
+\tconst EcRealVector& q,
+\tconst EcRealVector& dq,
+\tconst EcRealVector& ddq,
+\tconst EcRealVector& parms,
+\tEcRealVector& tau
+)
+{{
+\tif (q.size() != m_NumJoints || dq.size() != m_NumJoints || ddq.size() != m_NumJoints)
+\t{{
+\t\treturn false;
+\t}}
+\tif (!parms.empty() && m_useExternalRuntimeParms && !hasValidRuntimeParms(parms))
+\t{{
+\t\treturn false;
+\t}}
+\tEcRealVector tauM(m_NumJoints, 0.0);
+\tEcRealVector tauC(m_NumJoints, 0.0);
+\tEcRealVector tauG(m_NumJoints, 0.0);
+\tEcRealVector tauF(m_NumJoints, 0.0);
+\tcomputeMassTorque(q, ddq, parms, tauM);
+\tcomputeCoriolisTorque(q, dq, parms, tauC);
+\tcalculateGravityJointTorques(q, parms, tauG);
+\tcomputeFrictionTorque(q, dq, ddq, parms, tauF);
+\tif (tau.size() != m_NumJoints)
+\t{{
+\t\ttau.assign(m_NumJoints, 0.0);
+\t}}
+\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)
+\t{{
+\t\ttau[idx] = tauM[idx] + tauC[idx] + tauG[idx] + tauF[idx];
+\t}}
+\treturn true;
+}}
+"""
+    source = source.replace(old_dispatch, legacy_impl + "\n" + dispatch_impl)
+
+    extra_impl = """
+EcReal __CLASS_NAME__::configValue
+(
+\tconst EcRealVector& values,
+\tconst EcSizeT index,
+\tconst EcReal defaultValue
+) const
+{
+\treturn index < values.size() ? values[index] : defaultValue;
+}
+
+void __CLASS_NAME__::clearLastRuntimeDiagnostics(const EcBoolean validationOk)
+{
+\tm_lastDiagnostics.q_raw.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.dq_raw.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.ddq_raw.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.q_used.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.dq_used.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.ddq_used.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.tau_M_raw.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.tau_C_raw.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.tau_G.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.tau_F_viscous.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.tau_F_coulomb.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.tau_F_hold.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.tau_F_total.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.tau_M_used.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.tau_C_used.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.tau_total.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.friction_sign.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.hold_indicator.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.motion_state.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.wM.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.wC.assign(kNumJoints, 0.0);
+\tm_lastDiagnostics.validation_status.assign(kNumJoints, validationOk ? 1.0 : 0.0);
+}
+
+void __CLASS_NAME__::setRuntimeTorqueMode
+(
+\tconst EcInt32 mode
+)
+{
+\tif (mode < LEGACY_RAW || mode > ROBUST_TIMED_RESERVED)
+\t{
+\t\tm_runtimeTorqueMode = LEGACY_RAW;
+\t\treturn;
+\t}
+\tm_runtimeTorqueMode = mode;
+}
+
+void __CLASS_NAME__::setRuntimeNoTimeConfig
+(
+\tconst RuntimeNoTimeConfig& config
+)
+{
+\tm_runtimeNoTimeConfig = config;
+}
+
+void __CLASS_NAME__::setSampleSmoothingConfig
+(
+\tconst SampleSmoothingConfig& config
+)
+{
+\tm_sampleSmoothingConfig = config;
+}
+
+void __CLASS_NAME__::setRuntimeValidationConfig
+(
+\tconst RuntimeValidationConfig& config
+)
+{
+\tm_runtimeValidationConfig = config;
+}
+
+void __CLASS_NAME__::setDdqClampConfig
+(
+\tconst DdqClampConfig& config
+)
+{
+\tm_ddqClampConfig = config;
+}
+
+void __CLASS_NAME__::setFrictionStateConfig
+(
+\tconst FrictionStateConfig& config
+)
+{
+\tm_frictionStateConfig = config;
+}
+
+void __CLASS_NAME__::setMCGateConfig
+(
+\tconst MCGateConfig& config
+)
+{
+\tm_mcGateConfig = config;
+}
+
+void __CLASS_NAME__::resetRuntimeRobustState
+(
+)
+{
+\tm_qUsed.assign(kNumJoints, 0.0);
+\tm_dqUsed.assign(kNumJoints, 0.0);
+\tm_ddqUsed.assign(kNumJoints, 0.0);
+\tm_qPrev.assign(kNumJoints, 0.0);
+\tm_dqPrev.assign(kNumJoints, 0.0);
+\tm_ddqPrev.assign(kNumJoints, 0.0);
+\tm_tauM.assign(kNumJoints, 0.0);
+\tm_tauC.assign(kNumJoints, 0.0);
+\tm_tauG.assign(kNumJoints, 0.0);
+\tm_tauF.assign(kNumJoints, 0.0);
+\tm_tauTotal.assign(kNumJoints, 0.0);
+\tm_tauFViscous.assign(kNumJoints, 0.0);
+\tm_tauFCoulomb.assign(kNumJoints, 0.0);
+\tm_tauFHold.assign(kNumJoints, 0.0);
+\tm_frictionSign.assign(kNumJoints, 0.0);
+\tm_holdIndicator.assign(kNumJoints, 0.0);
+\tm_motionState.assign(kNumJoints, 0.0);
+\tm_validationStatus.assign(kNumJoints, 0.0);
+\tm_hasRobustStateInitialized = false;
+\tclearLastRuntimeDiagnostics(false);
+}
+
+void __CLASS_NAME__::getLastRuntimeDiagnostics
+(
+\tRuntimeDiagnostics& diagnostics
+) const
+{
+\tdiagnostics = m_lastDiagnostics;
+}
+
+void __CLASS_NAME__::getLastTorqueComponents
+(
+\tEcRealVector& tauM,
+\tEcRealVector& tauC,
+\tEcRealVector& tauG,
+\tEcRealVector& tauF,
+\tEcRealVector& tauTotal
+) const
+{
+\ttauM = m_lastDiagnostics.tau_M_used;
+\ttauC = m_lastDiagnostics.tau_C_used;
+\ttauG = m_lastDiagnostics.tau_G;
+\ttauF = m_lastDiagnostics.tau_F_total;
+\ttauTotal = m_lastDiagnostics.tau_total;
+}
+
+void __CLASS_NAME__::getLastRuntimeSignals
+(
+\tEcRealVector& qUsed,
+\tEcRealVector& dqUsed,
+\tEcRealVector& ddqUsed,
+\tEcRealVector& frictionSign,
+\tEcRealVector& motionState
+) const
+{
+\tqUsed = m_lastDiagnostics.q_used;
+\tdqUsed = m_lastDiagnostics.dq_used;
+\tddqUsed = m_lastDiagnostics.ddq_used;
+\tfrictionSign = m_lastDiagnostics.friction_sign;
+\tmotionState = m_lastDiagnostics.motion_state;
+}
+
+EcBoolean __CLASS_NAME__::validateRuntimeInputNoTime
+(
+\tconst EcRealVector& q,
+\tconst EcRealVector& dq,
+\tconst EcRealVector& ddq,
+\tconst EcRealVector& parms,
+\tEcRealVector& tau
+)
+{
+\tif (tau.size() != m_NumJoints)
+\t{
+\t\ttau.assign(m_NumJoints, 0.0);
+\t}
+\telse
+\t{
+\t\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)
+\t\t{
+\t\t\ttau[idx] = 0.0;
+\t\t}
+\t}
+\tclearLastRuntimeDiagnostics(false);
+\tif (q.size() != m_NumJoints || dq.size() != m_NumJoints || ddq.size() != m_NumJoints)
+\t{
+\t\treturn false;
+\t}
+\tif (!hasValidRuntimeParms(parms))
+\t{
+\t\treturn false;
+\t}
+\tif (m_runtimeNoTimeConfig.enableInputValidation && m_runtimeValidationConfig.enableFiniteCheck)
+\t{
+\t\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)
+\t\t{
+\t\t\tif (!isfinite(q[idx]) || !isfinite(dq[idx]) || !isfinite(ddq[idx]))
+\t\t\t{
+\t\t\t\treturn false;
+\t\t\t}
+\t\t}
+\t}
+\tif (m_runtimeNoTimeConfig.enableInputValidation && m_runtimeValidationConfig.enableRadianRangeCheck)
+\t{
+\t\tEcSizeT suspiciousCount = 0;
+\t\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)
+\t\t{
+\t\t\tif (fabs(q[idx]) > m_runtimeValidationConfig.maxAbsQForRadianCheck)
+\t\t\t{
+\t\t\t\t++suspiciousCount;
+\t\t\t}
+\t\t}
+\t\tif (suspiciousCount >= 2)
+\t\t{
+\t\t\treturn false;
+\t\t}
+\t}
+\tif (m_runtimeNoTimeConfig.enableInputValidation && m_runtimeValidationConfig.enableGravityNormCheck)
+\t{
+\t\tconst EcReal norm = sqrt(m_gx * m_gx + m_gy * m_gy + m_gz * m_gz);
+\t\tif (fabs(norm - m_runtimeValidationConfig.gravityNormExpected) > m_runtimeValidationConfig.gravityNormTolerance)
+\t\t{
+\t\t\treturn false;
+\t\t}
+\t}
+\treturn true;
+}
+
+void __CLASS_NAME__::updateMotionStateNoTime()
+{
+\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)
+\t{
+\t\tconst EcReal vOff = configValue(m_frictionStateConfig.vOff, idx, 0.01);
+\t\tconst EcReal vOn = configValue(m_frictionStateConfig.vOn, idx, 0.03);
+\t\tconst EcReal aOff = configValue(m_frictionStateConfig.aOff, idx, 0.2);
+\t\tconst EcReal smoothVelocity = configValue(m_frictionStateConfig.smoothVelocity, idx, 0.02);
+\t\tconst EcReal previousSign = idx < m_frictionSign.size() ? m_frictionSign[idx] : 0.0;
+\t\tconst EcInt32 previousState = idx < m_motionState.size() ? static_cast<EcInt32>(m_motionState[idx]) : STATIC;
+\t\tEcInt32 state = TRANSITION;
+\t\tEcReal sign = previousSign;
+\t\tEcReal hold = 0.0;
+\t\tif (!(m_runtimeNoTimeConfig.enableFrictionStateMachine && m_frictionStateConfig.enabled))
+\t\t{
+\t\t\tif (fabs(m_dqUsed[idx]) < vOff && fabs(m_ddqUsed[idx]) < aOff)
+\t\t\t{
+\t\t\t\tstate = STATIC;
+\t\t\t}
+\t\t\telse if (m_dqUsed[idx] > 0.0)
+\t\t\t{
+\t\t\t\tstate = MOVING_POSITIVE;
+\t\t\t}
+\t\t\telse if (m_dqUsed[idx] < 0.0)
+\t\t\t{
+\t\t\t\tstate = MOVING_NEGATIVE;
+\t\t\t}
+\t\t}
+\t\telse if (fabs(m_dqUsed[idx]) < vOff && fabs(m_ddqUsed[idx]) < aOff)
+\t\t{
+\t\t\tstate = STATIC;
+\t\t}
+\t\telse if (m_dqUsed[idx] > vOn)
+\t\t{
+\t\t\tstate = MOVING_POSITIVE;
+\t\t}
+\t\telse if (m_dqUsed[idx] < -vOn)
+\t\t{
+\t\t\tstate = MOVING_NEGATIVE;
+\t\t}
+\t\telse if (m_frictionStateConfig.enableHysteresis)
+\t\t{
+\t\t\tif (previousState == MOVING_POSITIVE && m_dqUsed[idx] > -vOff)
+\t\t\t{
+\t\t\t\tstate = MOVING_POSITIVE;
+\t\t\t}
+\t\t\telse if (previousState == MOVING_NEGATIVE && m_dqUsed[idx] < vOff)
+\t\t\t{
+\t\t\t\tstate = MOVING_NEGATIVE;
+\t\t\t}
+\t\t}
+\t\tif (state == STATIC)
+\t\t{
+\t\t\tsign = 0.0;
+\t\t\thold = (m_runtimeNoTimeConfig.enableHoldMode && m_frictionStateConfig.enableHoldMode) ? 1.0 : 0.0;
+\t\t}
+\t\telse if (state == MOVING_POSITIVE)
+\t\t{
+\t\t\tsign = 1.0;
+\t\t}
+\t\telse if (state == MOVING_NEGATIVE)
+\t\t{
+\t\t\tsign = -1.0;
+\t\t}
+\t\telse if (m_frictionStateConfig.enableSmoothSign && smoothVelocity > 0.0)
+\t\t{
+\t\t\tsign = tanh(m_dqUsed[idx] / smoothVelocity);
+\t\t}
+\t\tm_motionState[idx] = static_cast<EcReal>(state);
+\t\tm_frictionSign[idx] = sign;
+\t\tm_holdIndicator[idx] = hold;
+\t}
+}
+
+void __CLASS_NAME__::computeFrictionTorqueRobustNoTimeInternal
+(
+\tconst EcRealVector& parms,
+\tEcRealVector& tau
+)
+{
+\tif (tau.size() != m_NumJoints)
+\t{
+\t\ttau.assign(m_NumJoints, 0.0);
+\t}
+\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)
+\t{
+\t\tconst EcSizeT offset = idx * kRuntimeParamsPerJoint;
+\t\tconst EcReal fv = parms[offset + 11];
+\t\tconst EcReal fc = parms[offset + 12];
+\t\tconst EcReal holdBias = configValue(m_frictionStateConfig.holdBias, idx, 0.0);
+\t\tm_tauFViscous[idx] = fv * m_dqUsed[idx];
+\t\tm_tauFCoulomb[idx] = fc * m_frictionSign[idx];
+\t\tm_tauFHold[idx] = holdBias * m_holdIndicator[idx];
+\t\ttau[idx] = m_tauFViscous[idx] + m_tauFCoulomb[idx] + m_tauFHold[idx];
+\t}
+}
+
+EcBoolean __CLASS_NAME__::calculateEstimateJointToqruesRobustNoTimeInternal
+(
+\tconst EcRealVector& q,
+\tconst EcRealVector& dq,
+\tconst EcRealVector& ddq,
+\tconst EcRealVector& parms,
+\tEcRealVector& tau
+)
+{
+\tif (!validateRuntimeInputNoTime(q, dq, ddq, parms, tau))
+\t{
+\t\treturn false;
+\t}
+\tconst EcRealVector& activeParms = activeRuntimeParms(parms);
+\tclearLastRuntimeDiagnostics(true);
+\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)
+\t{
+\t\tm_lastDiagnostics.q_raw[idx] = q[idx];
+\t\tm_lastDiagnostics.dq_raw[idx] = dq[idx];
+\t\tm_lastDiagnostics.ddq_raw[idx] = ddq[idx];
+\t}
+\tif (!m_hasRobustStateInitialized)
+\t{
+\t\tm_qUsed = q;
+\t\tm_dqUsed = dq;
+\t\tm_ddqUsed = ddq;
+\t}
+\telse
+\t{
+\t\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)
+\t\t{
+\t\t\tconst EcReal qAlpha = configValue(m_sampleSmoothingConfig.qAlpha, idx, 1.0);
+\t\t\tconst EcReal dqAlpha = configValue(m_sampleSmoothingConfig.dqAlpha, idx, 1.0);
+\t\t\tconst EcReal ddqAlpha = configValue(m_sampleSmoothingConfig.ddqAlpha, idx, 1.0);
+\t\t\tm_qUsed[idx] = (m_runtimeNoTimeConfig.enableSampleSmoothing && m_sampleSmoothingConfig.enabled)
+\t\t\t\t? qAlpha * q[idx] + (1.0 - qAlpha) * m_qPrev[idx] : q[idx];
+\t\t\tm_dqUsed[idx] = (m_runtimeNoTimeConfig.enableSampleSmoothing && m_sampleSmoothingConfig.enabled)
+\t\t\t\t? dqAlpha * dq[idx] + (1.0 - dqAlpha) * m_dqPrev[idx] : dq[idx];
+\t\t\tm_ddqUsed[idx] = (m_runtimeNoTimeConfig.enableSampleSmoothing && m_sampleSmoothingConfig.enabled)
+\t\t\t\t? ddqAlpha * ddq[idx] + (1.0 - ddqAlpha) * m_ddqPrev[idx] : ddq[idx];
+\t\t}
+\t}
+\tif (m_runtimeNoTimeConfig.enableDdqClamp && m_ddqClampConfig.enabled)
+\t{
+\t\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)
+\t\t{
+\t\t\tconst EcReal limit = fabs(configValue(m_ddqClampConfig.ddqLimit, idx, 50.0));
+\t\t\tif (m_ddqUsed[idx] > limit)
+\t\t\t{
+\t\t\t\tm_ddqUsed[idx] = limit;
+\t\t\t}
+\t\t\telse if (m_ddqUsed[idx] < -limit)
+\t\t\t{
+\t\t\t\tm_ddqUsed[idx] = -limit;
+\t\t\t}
+\t\t}
+\t}
+\tupdateMotionStateNoTime();
+\tcomputeMassTorque(m_qUsed, m_ddqUsed, activeParms, m_tauM);
+\tcomputeCoriolisTorque(m_qUsed, m_dqUsed, activeParms, m_tauC);
+\tcalculateGravityJointTorques(m_qUsed, activeParms, m_tauG);
+\tcomputeFrictionTorqueRobustNoTimeInternal(activeParms, m_tauF);
+\tif (tau.size() != m_NumJoints)
+\t{
+\t\ttau.assign(m_NumJoints, 0.0);
+\t}
+\tfor (EcSizeT idx = 0; idx < m_NumJoints; ++idx)
+\t{
+\t\tEcReal wM = 1.0;
+\t\tEcReal wC = 1.0;
+\t\tif (m_runtimeNoTimeConfig.enableMCGate && m_mcGateConfig.enabled)
+\t\t{
+\t\t\tconst EcInt32 state = static_cast<EcInt32>(m_motionState[idx]);
+\t\t\tif (state == STATIC)
+\t\t\t{
+\t\t\t\twM = m_mcGateConfig.staticWM;
+\t\t\t\twC = m_mcGateConfig.staticWC;
+\t\t\t}
+\t\t\telse if (state == TRANSITION)
+\t\t\t{
+\t\t\t\twM = m_mcGateConfig.transitionWM;
+\t\t\t\twC = m_mcGateConfig.transitionWC;
+\t\t\t}
+\t\t\telse
+\t\t\t{
+\t\t\t\twM = m_mcGateConfig.dynamicWM;
+\t\t\t\twC = m_mcGateConfig.dynamicWC;
+\t\t\t}
+\t\t}
+\t\tconst EcReal tauMUsed = wM * m_tauM[idx];
+\t\tconst EcReal tauCUsed = wC * m_tauC[idx];
+\t\tm_tauTotal[idx] = tauMUsed + tauCUsed + m_tauG[idx] + m_tauF[idx];
+\t\ttau[idx] = m_tauTotal[idx];
+\t\tm_lastDiagnostics.q_used[idx] = m_qUsed[idx];
+\t\tm_lastDiagnostics.dq_used[idx] = m_dqUsed[idx];
+\t\tm_lastDiagnostics.ddq_used[idx] = m_ddqUsed[idx];
+\t\tm_lastDiagnostics.tau_M_raw[idx] = m_tauM[idx];
+\t\tm_lastDiagnostics.tau_C_raw[idx] = m_tauC[idx];
+\t\tm_lastDiagnostics.tau_G[idx] = m_tauG[idx];
+\t\tm_lastDiagnostics.tau_F_viscous[idx] = m_tauFViscous[idx];
+\t\tm_lastDiagnostics.tau_F_coulomb[idx] = m_tauFCoulomb[idx];
+\t\tm_lastDiagnostics.tau_F_hold[idx] = m_tauFHold[idx];
+\t\tm_lastDiagnostics.tau_F_total[idx] = m_tauF[idx];
+\t\tm_lastDiagnostics.tau_M_used[idx] = tauMUsed;
+\t\tm_lastDiagnostics.tau_C_used[idx] = tauCUsed;
+\t\tm_lastDiagnostics.tau_total[idx] = m_tauTotal[idx];
+\t\tm_lastDiagnostics.friction_sign[idx] = m_frictionSign[idx];
+\t\tm_lastDiagnostics.hold_indicator[idx] = m_holdIndicator[idx];
+\t\tm_lastDiagnostics.motion_state[idx] = m_motionState[idx];
+\t\tm_lastDiagnostics.wM[idx] = wM;
+\t\tm_lastDiagnostics.wC[idx] = wC;
+\t\tm_lastDiagnostics.validation_status[idx] = 1.0;
+\t}
+\tm_qPrev = m_qUsed;
+\tm_dqPrev = m_dqUsed;
+\tm_ddqPrev = m_ddqUsed;
+\tm_hasRobustStateInitialized = true;
+\treturn true;
+}
+""".replace("__CLASS_NAME__", class_name)
+
+    source = source + "\n" + extra_impl
+    cpp_path.write_text(source, encoding="utf-8")
+
+
 def _extract_generated_function(
     source: str,
     function_name: str,
     replacement_signature: str,
     arg_names: list[str],
+    output_name: str = "tau",
 ) -> str:
     marker = f"static int {function_name}("
     start = source.index(marker)
@@ -482,7 +1721,7 @@ def _extract_generated_function(
     body = source[body_start + 1:end - 1]
 
     replacements = {
-        r"if \(res\[0\]!=0\) res\[0\]\[(\d+)\]=([^;]+);": r"tau[\1] = \2;",
+        r"if \(res\[0\]!=0\) res\[0\]\[(\d+)\]=([^;]+);": rf"{output_name}[\1] = \2;",
     }
     for arg_index, arg_name in enumerate(arg_names):
         replacements[rf"arg\[{arg_index}\]\? arg\[{arg_index}\]\[(\d+)\] : 0"] = rf"{arg_name}[\1]"
@@ -556,15 +1795,47 @@ def _make_direct_core_code(generated_source: str) -> str:
         "const double* q, double* tau)",
         ["q"],
     )
+    rigid_regressor_core = _extract_generated_function(
+        generated_source,
+        "casadi_f9",
+        "static void calculateIdentifiedRigidRegressorRowMajorCore("
+        "const double* q, const double* dq, const double* ddq, const double* gravity, double* out)",
+        ["q", "dq", "ddq", "gravity"],
+        output_name="out",
+    )
+    gravity_regressor_core = _extract_generated_function(
+        generated_source,
+        "casadi_f10",
+        "static void calculateIdentifiedGravityRegressorRowMajorCore("
+        "const double* q, const double* gravity, double* out)",
+        ["q", "gravity"],
+        output_name="out",
+    )
+    zero_gravity_rigid_regressor_core = _extract_generated_function(
+        generated_source,
+        "casadi_f11",
+        "static void calculateIdentifiedZeroGravityRigidRegressorRowMajorCore("
+        "const double* q, const double* dq, const double* ddq, double* out)",
+        ["q", "dq", "ddq"],
+        output_name="out",
+    )
     return "\n".join(
         [
             "#include <math.h>",
             "",
             "static double signWithZero(double value)",
             "{",
-            "\t// Match the deadzone-aware Coulomb term used during identification.",
-            "\tconst double deadzone = 1e-4;",
-            "\treturn value < -deadzone ? -1.0 : value > deadzone ? 1.0 : 0.0;",
+            "\t// Treat speeds within 0.1 deg/s as stationary, then smoothly blend",
+            "\t// the Coulomb term through zero to avoid hard sign flips.",
+            "\tconst double deadzone = 1.7453292519943296e-03;  // 0.1 deg/s in rad/s",
+            "\tconst double speed_abs = fabs(value);",
+            "\tif (speed_abs <= deadzone)",
+            "\t{",
+            "\t\treturn 0.0;",
+            "\t}",
+            "\tconst double normalized = (speed_abs - deadzone) / deadzone;",
+            "\tconst double smooth_sign = tanh(normalized);",
+            "\treturn copysign(smooth_sign, value);",
             "}",
             "",
             "static double square(double value)",
@@ -597,6 +1868,15 @@ def _make_direct_core_code(generated_source: str) -> str:
             .replace("casadi_sign", "signWithZero")
             .replace("casadi_sq", "square"),
             gravity_z_core.replace("casadi_real", "double")
+            .replace("casadi_sign", "signWithZero")
+            .replace("casadi_sq", "square"),
+            rigid_regressor_core.replace("casadi_real", "double")
+            .replace("casadi_sign", "signWithZero")
+            .replace("casadi_sq", "square"),
+            gravity_regressor_core.replace("casadi_real", "double")
+            .replace("casadi_sign", "signWithZero")
+            .replace("casadi_sq", "square"),
+            zero_gravity_rigid_regressor_core.replace("casadi_real", "double")
             .replace("casadi_sign", "signWithZero")
             .replace("casadi_sq", "square"),
         ]
@@ -988,6 +2268,40 @@ def export_identified_inverse_dynamics_cpp(
         ["q"],
         ["tau"],
     )
+    rigid_regressor_row_major = ca.vertcat(
+        *[rigid_regressor[row_idx, col_idx] for row_idx in range(num_joints) for col_idx in range(num_rigid_params)]
+    )
+    gravity_regressor_row_major = ca.vertcat(
+        *[gravity_regressor[row_idx, col_idx] for row_idx in range(num_joints) for col_idx in range(num_rigid_params)]
+    )
+    zero_gravity_rigid_regressor_row_major = ca.vertcat(
+        *[
+            zero_gravity_rigid_regressor[row_idx, col_idx]
+            for row_idx in range(num_joints)
+            for col_idx in range(num_rigid_params)
+        ]
+    )
+    rigid_regressor_function = ca.Function(
+        "identified_rigid_regressor_row_major",
+        [q, dq, ddq, gravity],
+        [rigid_regressor_row_major],
+        ["q", "dq", "ddq", "gravity"],
+        ["out"],
+    )
+    gravity_regressor_function = ca.Function(
+        "identified_gravity_regressor_row_major",
+        [q, gravity],
+        [gravity_regressor_row_major],
+        ["q", "gravity"],
+        ["out"],
+    )
+    zero_gravity_rigid_regressor_function = ca.Function(
+        "identified_zero_gravity_rigid_regressor_row_major",
+        [q, dq, ddq],
+        [zero_gravity_rigid_regressor_row_major],
+        ["q", "dq", "ddq"],
+        ["out"],
+    )
 
     c_filename = f"identified_inverse_dynamics_{result_stem}_core.c"
     project_header_filename = f"{class_name}.h"
@@ -1006,14 +2320,37 @@ def export_identified_inverse_dynamics_cpp(
         codegen.add(gravity_x_function)
         codegen.add(gravity_y_function)
         codegen.add(gravity_z_function)
+        codegen.add(rigid_regressor_function)
+        codegen.add(gravity_regressor_function)
+        codegen.add(zero_gravity_rigid_regressor_function)
         codegen.generate()
 
     generated_core_code = _make_direct_core_code((temp_dir / c_filename).read_text(encoding="utf-8"))
-    for temp_file in temp_dir.iterdir():
-        temp_file.unlink()
-    temp_dir.rmdir()
+    if temp_dir.exists():
+        for temp_file in temp_dir.iterdir():
+            temp_file.unlink()
+        temp_dir.rmdir()
 
     del mlp_compensator
+
+    default_runtime_parms = np.zeros(num_joints * 13, dtype=float)
+    for joint_idx in range(num_joints):
+        rigid_offset = 10 * joint_idx
+        runtime_offset = 13 * joint_idx
+        phi = theta_full[rigid_offset:rigid_offset + 10]
+        default_runtime_parms[runtime_offset + 0] = phi[4]
+        default_runtime_parms[runtime_offset + 1] = phi[5]
+        default_runtime_parms[runtime_offset + 2] = phi[6]
+        default_runtime_parms[runtime_offset + 3] = phi[7]
+        default_runtime_parms[runtime_offset + 4] = phi[8]
+        default_runtime_parms[runtime_offset + 5] = phi[9]
+        default_runtime_parms[runtime_offset + 6] = phi[1]
+        default_runtime_parms[runtime_offset + 7] = phi[2]
+        default_runtime_parms[runtime_offset + 8] = phi[3]
+        default_runtime_parms[runtime_offset + 9] = phi[0]
+        default_runtime_parms[runtime_offset + 10] = 0.0
+        default_runtime_parms[runtime_offset + 11] = viscous[joint_idx]
+        default_runtime_parms[runtime_offset + 12] = coulomb[joint_idx]
 
     project_header_path = output_dir / project_header_filename
     project_cpp_path = output_dir / project_cpp_filename
@@ -1027,9 +2364,12 @@ def export_identified_inverse_dynamics_cpp(
         class_name,
         num_joints,
         np.asarray(GravityConfig.from_any(gravity_config or robot_model.gravity_vector).gravity_vector_base, dtype=float),
+        default_runtime_parms,
         generated_core_code,
         generation_metadata,
     )
+    _inject_runtime_robust_header(project_header_path, class_name)
+    _inject_runtime_robust_cpp(project_cpp_path, class_name)
 
     return {
         "project_header": project_header_path,

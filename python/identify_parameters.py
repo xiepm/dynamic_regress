@@ -92,6 +92,12 @@ class RegressorBuilder:
             return gravity
         return np.tile(np.asarray(self.robot_model.gravity_vector, dtype=float), (len(df), 1))
 
+    def _select_joint_matrix(self, df: pd.DataFrame, preferred_prefix: str, fallback_prefix: str) -> np.ndarray:
+        preferred_columns = [f'{preferred_prefix}_{i}' for i in range(1, self.num_joints + 1)]
+        if all(column in df.columns for column in preferred_columns):
+            return np.column_stack([df[column].values for column in preferred_columns])
+        return np.column_stack([df[f'{fallback_prefix}_{i}'].values for i in range(1, self.num_joints + 1)])
+
     def _rigid_regressor_with_conditions(
         self,
         data,
@@ -117,9 +123,17 @@ class RegressorBuilder:
         finally:
             model.gravity.linear = previous_gravity
 
-    def _friction_block(self, dq_sample: np.ndarray) -> np.ndarray:
+    def _friction_block(
+        self,
+        dq_sample: np.ndarray,
+        friction_sign_sample: np.ndarray | None = None,
+    ) -> np.ndarray:
         friction_block = np.zeros((self.num_joints, self.num_friction_params))
-        dq_sign = coulomb_sign(dq_sample)
+        dq_sign = (
+            np.asarray(friction_sign_sample, dtype=float).reshape(self.num_joints)
+            if friction_sign_sample is not None
+            else coulomb_sign(dq_sample)
+        )
         for joint_idx in range(self.num_joints):
             friction_block[joint_idx, joint_idx] = dq_sample[joint_idx]
             friction_block[joint_idx, self.num_joints + joint_idx] = dq_sign[joint_idx]
@@ -128,15 +142,21 @@ class RegressorBuilder:
     def _bias_block(self) -> np.ndarray:
         return np.eye(self.num_joints, dtype=float)
 
-    def _hold_block(self, dq_sample: np.ndarray) -> np.ndarray:
+    def _hold_block(
+        self,
+        dq_sample: np.ndarray,
+        hold_indicator_sample: np.ndarray | None = None,
+    ) -> np.ndarray:
         hold_block = np.zeros((self.num_joints, self.num_joints), dtype=float)
-        abs_dq = np.abs(np.asarray(dq_sample, dtype=float))
-
-        if self.model_options['hold_model'] == 'indicator':
-            activation = (abs_dq <= self.model_options['hold_velocity_epsilon']).astype(float)
+        if hold_indicator_sample is not None:
+            activation = np.asarray(hold_indicator_sample, dtype=float).reshape(self.num_joints)
         else:
-            velocity_scale = self.model_options['stribeck_velocity_scale']
-            activation = np.exp(-np.square(abs_dq / velocity_scale))
+            abs_dq = np.abs(np.asarray(dq_sample, dtype=float))
+            if self.model_options['hold_model'] == 'indicator':
+                activation = (abs_dq <= self.model_options['hold_velocity_epsilon']).astype(float)
+            else:
+                velocity_scale = self.model_options['stribeck_velocity_scale']
+                activation = np.exp(-np.square(abs_dq / velocity_scale))
 
         for joint_idx in range(self.num_joints):
             hold_block[joint_idx, joint_idx] = activation[joint_idx]
@@ -146,10 +166,20 @@ class RegressorBuilder:
         """
         构造显式的 M/C/G/F 分解回归矩阵分量。
         """
-        q = np.column_stack([df[f'q_{i}'].values for i in range(1, self.num_joints + 1)])
-        dq = np.column_stack([df[f'dq_{i}'].values for i in range(1, self.num_joints + 1)])
-        ddq = np.column_stack([df[f'ddq_{i}'].values for i in range(1, self.num_joints + 1)])
+        q = self._select_joint_matrix(df, 'q_used', 'q')
+        dq = self._select_joint_matrix(df, 'dq_used', 'dq')
+        ddq = self._select_joint_matrix(df, 'ddq_used', 'ddq')
         gravity = self._gravity_matrix_from_dataframe(df)
+        friction_sign = (
+            self._select_joint_matrix(df, 'friction_sign', 'friction_sign')
+            if all(f'friction_sign_{i}' in df.columns for i in range(1, self.num_joints + 1))
+            else None
+        )
+        hold_indicator = (
+            self._select_joint_matrix(df, 'hold_indicator', 'hold_indicator')
+            if all(f'hold_indicator_{i}' in df.columns for i in range(1, self.num_joints + 1))
+            else None
+        )
 
         num_samples = len(df)
         shape = (num_samples * self.num_joints, self.num_rigid_params)
@@ -211,11 +241,17 @@ class RegressorBuilder:
                 zero_ddq,
                 unit_z,
             )
-            Y_F[row_slice, :] = self._friction_block(dq_sample)
+            Y_F[row_slice, :] = self._friction_block(
+                dq_sample,
+                None if friction_sign is None else friction_sign[sample_idx],
+            )
             if Y_B is not None:
                 Y_B[row_slice, :] = self._bias_block()
             if Y_H is not None:
-                Y_H[row_slice, :] = self._hold_block(dq_sample)
+                Y_H[row_slice, :] = self._hold_block(
+                    dq_sample,
+                    None if hold_indicator is None else hold_indicator[sample_idx],
+                )
 
         components = {
             'gravity': gravity,
@@ -269,11 +305,21 @@ class RegressorBuilder:
         """
         保留旧的“整体 regressor”实现，用于数值对照测试。
         """
-        q = np.column_stack([df[f'q_{i}'].values for i in range(1, self.num_joints + 1)])
-        dq = np.column_stack([df[f'dq_{i}'].values for i in range(1, self.num_joints + 1)])
-        ddq = np.column_stack([df[f'ddq_{i}'].values for i in range(1, self.num_joints + 1)])
+        q = self._select_joint_matrix(df, 'q_used', 'q')
+        dq = self._select_joint_matrix(df, 'dq_used', 'dq')
+        ddq = self._select_joint_matrix(df, 'ddq_used', 'ddq')
         tau = np.column_stack([df[f'tau_{i}'].values for i in range(1, self.num_joints + 1)])
         gravity = self._gravity_matrix_from_dataframe(df)
+        friction_sign = (
+            self._select_joint_matrix(df, 'friction_sign', 'friction_sign')
+            if all(f'friction_sign_{i}' in df.columns for i in range(1, self.num_joints + 1))
+            else None
+        )
+        hold_indicator = (
+            self._select_joint_matrix(df, 'hold_indicator', 'hold_indicator')
+            if all(f'hold_indicator_{i}' in df.columns for i in range(1, self.num_joints + 1))
+            else None
+        )
 
         num_samples = len(df)
         Phi = np.zeros((num_samples * self.num_joints, self.total_params))
@@ -299,7 +345,10 @@ class RegressorBuilder:
                 Phi[row_slice, :self.num_rigid_params] = Y
                 col_start = self.num_rigid_params
                 col_end = col_start + self.num_friction_params
-                Phi[row_slice, col_start:col_end] = self._friction_block(dq[sample_idx])
+                Phi[row_slice, col_start:col_end] = self._friction_block(
+                    dq[sample_idx],
+                    None if friction_sign is None else friction_sign[sample_idx],
+                )
                 if self.num_bias_params:
                     col_start = col_end
                     col_end = col_start + self.num_bias_params
@@ -307,7 +356,10 @@ class RegressorBuilder:
                 if self.num_hold_params:
                     col_start = col_end
                     col_end = col_start + self.num_hold_params
-                    Phi[row_slice, col_start:col_end] = self._hold_block(dq[sample_idx])
+                    Phi[row_slice, col_start:col_end] = self._hold_block(
+                        dq[sample_idx],
+                        None if hold_indicator is None else hold_indicator[sample_idx],
+                    )
         finally:
             model.gravity.linear = previous_gravity
 

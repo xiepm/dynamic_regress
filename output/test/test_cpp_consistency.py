@@ -144,7 +144,12 @@ def _compile_harness(binary_path: Path, generated_cpp_path: Path) -> None:
     subprocess.run(command, cwd=project_root, check=True)
 
 
-def _run_harness(binary_path: Path, input_path: Path, gravity_vector: list[float]) -> np.ndarray:
+def _run_harness(
+    binary_path: Path,
+    input_path: Path,
+    gravity_vector: list[float],
+    parms_path: Path | None = None,
+) -> np.ndarray:
     command = [
         str(binary_path),
         str(input_path),
@@ -152,6 +157,8 @@ def _run_harness(binary_path: Path, input_path: Path, gravity_vector: list[float
         f"{gravity_vector[1]:.17g}",
         f"{gravity_vector[2]:.17g}",
     ]
+    if parms_path is not None:
+        command.append(str(parms_path))
     result = subprocess.run(
         command,
         cwd=project_root,
@@ -163,7 +170,10 @@ def _run_harness(binary_path: Path, input_path: Path, gravity_vector: list[float
     for line in result.stdout.strip().splitlines():
         if not line.strip():
             continue
-        rows.append([float(value) for value in line.split()])
+        tokens = line.split()
+        if not tokens or tokens[0] != "tau_pred":
+            continue
+        rows.append([float(value) for value in tokens[1:]])
     return np.asarray(rows, dtype=float)
 
 

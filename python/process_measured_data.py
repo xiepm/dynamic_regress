@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
 import numpy as np
@@ -17,6 +18,41 @@ from scipy.signal import savgol_filter
 
 from generate_golden_data import coulomb_sign
 from load_model import pin
+
+
+@dataclass
+class RobustIdentificationConfig:
+    """
+    Sample-based robust preprocessing for offline identification only.
+
+    This path intentionally does not infer physical time constants. It reuses
+    already-processed `q/dq/ddq/tau` samples and adds stable helper columns so
+    offline identification can stay closer to the no-time runtime behavior.
+    """
+
+    enabled: bool = False
+    q_alpha: np.ndarray = field(default_factory=lambda: np.ones(7, dtype=float))
+    dq_alpha: np.ndarray = field(default_factory=lambda: np.ones(7, dtype=float))
+    ddq_alpha: np.ndarray = field(default_factory=lambda: np.ones(7, dtype=float))
+    enable_ddq_clamp: bool = False
+    ddq_limit: np.ndarray = field(default_factory=lambda: np.full(7, 50.0, dtype=float))
+    v_off: np.ndarray = field(default_factory=lambda: np.full(7, 0.01, dtype=float))
+    v_on: np.ndarray = field(default_factory=lambda: np.full(7, 0.03, dtype=float))
+    a_off: np.ndarray = field(default_factory=lambda: np.full(7, 0.2, dtype=float))
+    enable_hold_mode: bool = False
+
+    def resized(self, num_joints: int) -> "RobustIdentificationConfig":
+        resized = RobustIdentificationConfig(enabled=self.enabled)
+        resized.enable_ddq_clamp = self.enable_ddq_clamp
+        resized.enable_hold_mode = self.enable_hold_mode
+        resized.q_alpha = np.resize(np.asarray(self.q_alpha, dtype=float), num_joints)
+        resized.dq_alpha = np.resize(np.asarray(self.dq_alpha, dtype=float), num_joints)
+        resized.ddq_alpha = np.resize(np.asarray(self.ddq_alpha, dtype=float), num_joints)
+        resized.ddq_limit = np.resize(np.asarray(self.ddq_limit, dtype=float), num_joints)
+        resized.v_off = np.resize(np.asarray(self.v_off, dtype=float), num_joints)
+        resized.v_on = np.resize(np.asarray(self.v_on, dtype=float), num_joints)
+        resized.a_off = np.resize(np.asarray(self.a_off, dtype=float), num_joints)
+        return resized
 
 
 class MeasuredDataProcessor:
@@ -308,6 +344,94 @@ def create_synthetic_measured_data(
         frame[f'ddq_true_{joint_idx + 1}'] = ddq[:, joint_idx]
         frame[f'tau_{joint_idx + 1}'] = tau[:, joint_idx]
     return pd.DataFrame(frame)
+
+
+def add_robust_identification_columns(
+    df: pd.DataFrame,
+    num_joints: int,
+    config: RobustIdentificationConfig | None = None,
+) -> pd.DataFrame:
+    """
+    Add optional no-time robust helper columns for offline identification.
+
+    The function is intentionally sample-based. It does not reconstruct
+    derivatives or claim Hz-domain filtering semantics.
+    """
+    normalized = (config or RobustIdentificationConfig(enabled=False)).resized(num_joints)
+    if not normalized.enabled:
+        return df.copy()
+
+    frame = df.copy()
+    q = np.column_stack([frame[f'q_{i}'].to_numpy(dtype=float) for i in range(1, num_joints + 1)])
+    dq = np.column_stack([frame[f'dq_{i}'].to_numpy(dtype=float) for i in range(1, num_joints + 1)])
+    ddq = np.column_stack([frame[f'ddq_{i}'].to_numpy(dtype=float) for i in range(1, num_joints + 1)])
+    tau = np.column_stack([frame[f'tau_{i}'].to_numpy(dtype=float) for i in range(1, num_joints + 1)])
+
+    q_used = q.copy()
+    dq_used = dq.copy()
+    ddq_used = ddq.copy()
+    friction_sign = np.zeros_like(dq)
+    hold_indicator = np.zeros_like(dq)
+    motion_state = np.zeros_like(dq)
+    sample_type = np.empty(len(frame), dtype=object)
+    previous_sign = np.zeros(num_joints, dtype=float)
+    previous_state = np.zeros(num_joints, dtype=int)
+
+    for sample_idx in range(len(frame)):
+        if sample_idx > 0:
+            q_used[sample_idx] = normalized.q_alpha * q[sample_idx] + (1.0 - normalized.q_alpha) * q_used[sample_idx - 1]
+            dq_used[sample_idx] = normalized.dq_alpha * dq[sample_idx] + (1.0 - normalized.dq_alpha) * dq_used[sample_idx - 1]
+            ddq_used[sample_idx] = normalized.ddq_alpha * ddq[sample_idx] + (1.0 - normalized.ddq_alpha) * ddq_used[sample_idx - 1]
+        if normalized.enable_ddq_clamp:
+            ddq_used[sample_idx] = np.clip(ddq_used[sample_idx], -normalized.ddq_limit, normalized.ddq_limit)
+
+        row_labels = []
+        for joint_idx in range(num_joints):
+            speed = abs(dq_used[sample_idx, joint_idx])
+            accel = abs(ddq_used[sample_idx, joint_idx])
+            if speed < normalized.v_off[joint_idx] and accel < normalized.a_off[joint_idx]:
+                state = 0
+            elif dq_used[sample_idx, joint_idx] > normalized.v_on[joint_idx]:
+                state = 1
+            elif dq_used[sample_idx, joint_idx] < -normalized.v_on[joint_idx]:
+                state = 2
+            else:
+                state = 3 if previous_state[joint_idx] == 0 else previous_state[joint_idx]
+
+            sign = previous_sign[joint_idx]
+            hold = 0.0
+            if state == 0:
+                sign = 0.0
+                hold = 1.0 if normalized.enable_hold_mode else 0.0
+                row_labels.append('static')
+            elif state == 1:
+                sign = 1.0
+                row_labels.append('dynamic')
+            elif state == 2:
+                sign = -1.0
+                row_labels.append('dynamic')
+            else:
+                row_labels.append('transition')
+
+            friction_sign[sample_idx, joint_idx] = sign
+            hold_indicator[sample_idx, joint_idx] = hold
+            motion_state[sample_idx, joint_idx] = float(state)
+            previous_sign[joint_idx] = sign
+            previous_state[joint_idx] = state
+
+        sample_type[sample_idx] = 'transition' if 'transition' in row_labels else ('dynamic' if 'dynamic' in row_labels else 'static')
+
+    for joint_idx in range(1, num_joints + 1):
+        column_idx = joint_idx - 1
+        frame[f'q_used_{joint_idx}'] = q_used[:, column_idx]
+        frame[f'dq_used_{joint_idx}'] = dq_used[:, column_idx]
+        frame[f'ddq_used_{joint_idx}'] = ddq_used[:, column_idx]
+        frame[f'tau_used_{joint_idx}'] = tau[:, column_idx]
+        frame[f'friction_sign_{joint_idx}'] = friction_sign[:, column_idx]
+        frame[f'hold_indicator_{joint_idx}'] = hold_indicator[:, column_idx]
+        frame[f'motion_state_{joint_idx}'] = motion_state[:, column_idx]
+    frame['sample_type'] = sample_type
+    return frame
 
 
 def compute_excitation_diagnostics(df: pd.DataFrame, num_joints: int) -> Dict[str, float]:
